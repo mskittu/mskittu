@@ -1,0 +1,23 @@
+cat "$QUERY_FILE" | while IFS=',' read -r table_name db_name actl_tbl_name condition; do
+  # Trim spaces from variables
+  table_name=$(echo "$table_name" | xargs)
+  db_name=$(echo "$db_name" | xargs)
+  actl_tbl_name=$(echo "$actl_tbl_name" | xargs)
+  condition=$(echo "$condition" | xargs)
+
+  # Check for valid inputs
+  if [[ -z "$table_name" || -z "$db_name" || -z "$actl_tbl_name" || -z "$condition" ]]; then
+    echo "Skipping invalid line: $table_name, $db_name, $actl_tbl_name, $condition"
+    continue
+  fi
+
+  # Ensure proper TO_DATE formatting with single quotes around 'yyyymmdd'
+  # Replace improperly formatted TO_DATE conditions
+  formatted_condition=$(echo "$condition" | sed -E "s/TO_DATE([^,]+), *'?yyyymmdd'?/TO_DATE(\1, 'yyyymmdd')/g")
+
+  # Construct the SQL query
+  sql_query="SELECT COUNT(*) FROM $db_name.$actl_tbl_name WHERE $formatted_condition"
+
+  # Output the SQL query
+  echo "$sql_query"
+done
