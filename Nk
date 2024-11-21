@@ -1,0 +1,52 @@
+#!/bin/bash
+
+# Path to the Python config file
+CONFIG_FILE_PATH_PY="/apps/tenant_local/usr/stg/HadoopSandbox/job/fin_recon/mds_daily_tbi_recon/0.9/conf/recon_config.py"
+
+# Check if the Python config file exists
+if [ -f "$CONFIG_FILE_PATH_PY" ]; then
+    echo "Python config file exists at $CONFIG_FILE_PATH_PY. Proceeding..."
+else
+    echo "Error: Python script not found at $CONFIG_FILE_PATH_PY"
+    exit 1
+fi
+
+# Retrieve credentials using Python
+credentials=$(python3 <<EOF
+import sys
+import os
+
+# Add the directory containing the Python file to sys.path
+config_dir = os.path.dirname("$CONFIG_FILE_PATH_PY")
+sys.path.insert(0, config_dir)
+
+try:
+    # Import recon_config and print credentials
+    import recon_config
+    print(f"{recon_config.username}:{recon_config.password}@{recon_config.db_name}")
+except ModuleNotFoundError as e:
+    print(f"Error: ModuleNotFoundError: {e}")
+    sys.exit(1)
+except AttributeError as e:
+    print(f"Error: AttributeError: {e}")
+    sys.exit(1)
+except Exception as e:
+    print(f"Error: {e}")
+    sys.exit(1)
+EOF
+)
+
+# Check if credentials were retrieved successfully
+if [ -z "$credentials" ] || [[ "$credentials" == Error:* ]]; then
+    echo "Error: Failed to retrieve credentials. Details: $credentials"
+    exit 1
+fi
+
+# Print the retrieved credentials
+echo "Retrieved credentials: $credentials"
+
+# Continue with the rest of your script...
+import sys
+sys.path.insert(0, "/apps/tenant_local/usr/stg/HadoopSandbox/job/fin_recon/mds_daily_tbi_recon/0.9/conf/")
+import recon_config
+print(f"{recon_config.username}:{recon_config.password}@{recon_config.db_name}")
