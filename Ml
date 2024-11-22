@@ -1,0 +1,49 @@
+#!/bin/bash
+
+# Input file containing the SQL queries
+INPUT_FILE="queries.txt"
+
+# Output CSV file
+OUTPUT_FILE="source_count.csv"
+
+# Oracle credentials
+DB_CREDENTIALS="your_username/your_password@your_db"
+
+# Initialize the CSV file with a header
+echo "table_name,source_count" > "$OUTPUT_FILE"
+
+# Read and execute each SQL query
+while IFS= read -r sql_query; do
+  # Skip empty lines
+  if [[ -z "$sql_query" ]]; then
+    continue
+  fi
+
+  # Extract table name from the SQL query
+  table_name=$(echo "$sql_query" | grep -oP '(?<=FROM )[^\s]+')
+
+  # Log the query being executed
+  echo "Executing query for table: $table_name"
+
+  # Execute the query and capture the row count
+  row_count=$(sqlplus -s "$DB_CREDENTIALS" <<EOF
+SET FEEDBACK OFF
+SET HEADING OFF
+SET PAGESIZE 0
+$sql_query
+EXIT;
+EOF
+)
+
+  # Handle possible errors
+  if [[ -z "$row_count" || "$row_count" == "SP2-"* ]]; then
+    echo "Error executing query for table $table_name. Skipping."
+    row_count="ERROR"
+  fi
+
+  # Append the result to the CSV file
+  echo "$table_name,$row_count" >> "$OUTPUT_FILE"
+
+done < "$INPUT_FILE"
+
+echo "Query execution completed. Results saved to $OUTPUT_FILE."
