@@ -1,0 +1,118 @@
+import cx_Oracle
+import subprocess
+import csv
+
+def get_oracle_table_counts_from_file(query_file):
+    try:
+        # Oracle connection details
+        username = "sys"  # Admin user
+        password = "*******"
+        hostname = "localhost"
+        port = "1521"
+        service_name = "ORCL"  # Replace with your Oracle service name
+
+        # Create a DSN (Data Source Name)
+        dsn = cx_Oracle.makedsn(hostname, port, service_name=service_name)
+
+        # Establish a connection as SYSDBA
+        connection = cx_Oracle.connect(user=username, password=password, dsn=dsn, mode=cx_Oracle.SYSDBA)
+        cursor = connection.cursor()
+
+        # Read queries from the provided file
+        with open(query_file, 'r') as file:
+            queries = file.readlines()
+
+        results = []
+        table_names = []
+        for query in queries:
+            query = query.strip()  # Remove any leading/trailing whitespaces or newline characters
+            if query:
+                print(f"Executing Oracle query: {query}")
+                cursor.execute(query)
+                result = cursor.fetchone()  # Fetch the result (COUNT)
+                results.append(result[0])  # Append count result
+
+                # Extract table name from the query (assuming standard naming convention)
+                # For example: 'SELECT COUNT(*) FROM SYS."EMPLOYEE"'
+                table_name = query.split("FROM")[1].split()[0].strip('"')  # Extracting table name dynamically
+                table_names.append(table_name)
+
+        return results, table_names
+
+    except cx_Oracle.DatabaseError as e:
+        print("There was a problem connecting to the Oracle database or executing the queries:", e)
+        return None, None
+
+    finally:
+        # Ensure resources are cleaned up
+        if 'cursor' in locals() and cursor is not None:
+            cursor.close()
+        if 'connection' in locals() and connection is not None:
+            connection.close()
+
+
+def get_hive_table_count():
+    try:
+        # Run Hive query to get table count and store the result in a CSV file
+        output_file = "target_count.csv"
+        
+        # Hive command (can be extended with multiple tables)
+        hive_command = 'hive -e "SELECT COUNT(*) FROM usrf_ingest.acct_tbal_prcng_b_eoc_fact UNION ALL SELECT COUNT(*) FROM usrf_ingest.acct_tbal_prcng_c_eoc_fact" >> {}'.format(output_file)
+        
+        # Execute the Hive command
+        subprocess.run(hive_command, shell=True, check=True)
+        
+        # Read the result from the output file
+        with open(output_file, 'r') as file:
+            counts = file.readlines()
+            print("Hive table counts: ", counts)
+
+        # Return counts and Hive table name(s)
+        return [int(count.strip()) for count in counts], ["acct_tbal_prcng_b_eoc_fact", "acct_tbal_prcng_c_eoc_fact"]
+
+    except subprocess.CalledProcessError as e:
+        print("There was an error executing the Hive query:", e)
+        return None, None
+
+
+def merge_counts(oracle_counts, oracle_table_names, hive_counts, hive_table_names):
+    # Prepare data to be written into the CSV file
+    data = [["Hive Table Name", "Oracle Table Name", "Hive Row Count", "Oracle Row Count", "Variance Status"]]
+
+    if oracle_counts is not None and hive_counts is not None:
+        for i, hive_count in enumerate(hive_counts):
+            oracle_count = oracle_counts[i] if i < len(oracle_counts) else None
+            oracle_table_name = oracle_table_names[i] if i < len(oracle_table_names) else None
+            hive_table_name = hive_table_names[i] if i < len(hive_table_names) else None
+
+            if oracle_count is not None:
+                # Compare Oracle and Hive counts
+                if oracle_count == hive_count:
+                    status = "Pass"
+                else:
+                    status = "Fail"
+                # Add comparison result to the data list
+                data.append([hive_table_name, oracle_table_name, hive_count, oracle_count, status])
+
+    # Write results into a final comparison CSV
+    with open('final_comparison.csv', mode='w', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerows(data)
+
+    print("Comparison results written to 'final_comparison.csv'.")
+
+
+if __name__ == "__main__":
+    # Define the path to the Oracle SQL queries file
+    oracle_query_file = 'oracle_queries.txt'
+
+    # Get the row counts and table names from Oracle queries
+    oracle_counts, oracle_table_names = get_oracle_table_counts_from_file(oracle_query_file)
+
+    # Get the row count and table name(s) from Hive
+    hive_counts, hive_table_names = get_hive_table_count()
+
+    # Check if both counts and table names are available for comparison
+    if oracle_counts is not None and hive_counts is not None:
+        # Merge and save the comparison results into a CSV file
+        merge_counts(oracle_counts, oracle_table_names, hive_counts, hive_table_names)
