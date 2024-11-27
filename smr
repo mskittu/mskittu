@@ -4,15 +4,11 @@ import csv
 def get_hive_table_count():
     try:
         # Output file for Hive query results
-        output_file = "/apps/tenant_local/usrf_stg/HadoopSandbox/x01532741/job/fin_recon/mds_daily_tbl_recon/0.9/source/target_count.csv"
+        output_file = "target.csv"
 
         # Hive query
         hive_query = """
-        SELECT 'usrf_ingest.cds_acct_tbal_prcng_b_eoc_fact' AS table_name, COUNT(*) AS count
-        FROM usrf_ingest.cds_acct_tbal_prcng_b_eoc_fact
-        UNION ALL
-        SELECT 'usrf_ingest.cds_acct_tbal_prcng_c_eoc_fact' AS table_name, COUNT(*) AS count
-        FROM usrf_ingest.cds_acct_tbal_prcng_c_eoc_fact;
+    
         """
 
         # Execute the Hive command and capture output
