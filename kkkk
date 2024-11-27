@@ -1,0 +1,49 @@
+def get_oracle_table_counts_from_file(query_file):
+    try:
+        # Oracle connection details
+        username = "sys"  # Admin user
+        password = "Kittu@$1980"
+        hostname = "localhost"
+        port = "1521"
+        service_name = "ORCL"  # Replace with your Oracle service name
+
+        # Create a DSN (Data Source Name)
+        dsn = cx_Oracle.makedsn(hostname, port, service_name=service_name)
+
+        # Establish a connection as SYSDBA
+        connection = cx_Oracle.connect(user=username, password=password, dsn=dsn, mode=cx_Oracle.SYSDBA)
+        cursor = connection.cursor()
+
+        # Read queries from the provided file
+        with open(query_file, 'r') as file:
+            queries = file.readlines()
+
+        results = []
+        for query in queries:
+            query = query.strip()  # Remove any leading/trailing whitespaces or newline characters
+            if query:
+                print(f"Executing Oracle query: {query}")
+                cursor.execute(query)
+                result = cursor.fetchone()  # Fetch the result (COUNT)
+                results.append(result[0])  # Append count result
+
+        # Save results to a CSV file
+        with open('oracle_query_results.csv', mode='w', newline='') as csv_file:
+            writer = csv.writer(csv_file)
+            writer.writerow(["Query", "Count"])  # Header row
+            for query, count in zip(queries, results):
+                writer.writerow([query.strip(), count])
+
+        print("Oracle query results saved to 'oracle_query_results.csv'.")
+        return results
+
+    except cx_Oracle.DatabaseError as e:
+        print("There was a problem connecting to the Oracle database or executing the queries:", e)
+        return None
+
+    finally:
+        # Ensure resources are cleaned up
+        if 'cursor' in locals() and cursor is not None:
+            cursor.close()
+        if 'connection' in locals() and connection is not None:
+            connection.close()
