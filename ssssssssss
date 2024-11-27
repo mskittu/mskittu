@@ -1,0 +1,113 @@
+import subprocess
+import csv
+
+def get_hive_table_count():
+    try:
+        # Output file for Hive query results
+        output_file = "target_count.csv"
+
+        # Hive query
+        hive_query = """
+        SELECT 'usrf_ingest.acct_tbal_prcng_b_eoc_fact' AS table_name, COUNT(*) AS count 
+        FROM usrf_ingest.acct_tbal_prcng_b_eoc_fact
+        UNION ALL
+        SELECT 'usrf_ingest.acct_tbal_prcng_c_eoc_fact' AS table_name, COUNT(*) AS count 
+        FROM usrf_ingest.acct_tbal_prcng_c_eoc_fact;
+        """
+
+        # Execute the Hive command
+        hive_command = f"hive -e \"{hive_query}\""
+        result = subprocess.check_output(hive_command, shell=True, text=True)
+
+        # Parse the results into lines
+        lines = result.strip().split("\n")
+        hive_results = []
+
+        for line in lines:
+            # Split the line into table name and count
+            if line.strip():  # Avoid empty lines
+                parts = line.split("\t")  # Assuming Hive outputs tab-separated results
+                table_name = parts[0]
+                count = int(parts[1])
+                hive_results.append((table_name, count))
+
+        # Append results to the CSV file
+        csv_file_name = 'hive_query_results.csv'
+        with open(csv_file_name, mode='a', newline='') as csv_file:
+            writer = csv.writer(csv_file)
+            # Write the header only if the file is empty
+            if csv_file.tell() == 0:
+                writer.writerow(["Hive_Table_Name", "Count"])  # Header row
+            for table_name, count in hive_results:
+                writer.writerow([table_name, count])
+
+        print(f"Hive query results appended to '{csv_file_name}'.")
+        return hive_results
+
+    except subprocess.CalledProcessError as e:
+        print("There was an error executing the Hive query:", e)
+        return None
+--------------------------------------------------------------------------------------------------
+SELECT 'usrf_ingest.acct_tbal_prcng_b_eoc_fact' AS table_name, COUNT(*) AS count 
+FROM usrf_ingest.acct_tbal_prcng_b_eoc_fact
+UNION ALL
+SELECT 'usrf_ingest.acct_tbal_prcng_c_eoc_fact' AS table_name, COUNT(*) AS count 
+FROM usrf_ingest.acct_tbal_prcng_c_eoc_fact;
+----------------------------------------------------------------------------------
+
+hive_query.txt:
+-------------------
+
+SELECT 'usrf_ingest.acct_tbal_prcng_b_eoc_fact' AS table_name, COUNT(*) AS count 
+FROM usrf_ingest.acct_tbal_prcng_b_eoc_fact
+UNION ALL
+SELECT 'usrf_ingest.acct_tbal_prcng_c_eoc_fact' AS table_name, COUNT(*) AS count 
+FROM usrf_ingest.acct_tbal_prcng_c_eoc_fact;
+
+code:
+---------------
+
+import subprocess
+import csv
+
+def get_hive_table_count(query_file):
+    try:
+        # Read the Hive query from the specified file
+        with open(query_file, 'r') as file:
+            hive_query = file.read().strip()
+
+        # Execute the Hive command
+        hive_command = f"hive -e \"{hive_query}\""
+        result = subprocess.check_output(hive_command, shell=True, text=True)
+
+        # Parse the results into lines
+        lines = result.strip().split("\n")
+        hive_results = []
+
+        for line in lines:
+            # Split the line into table name and count
+            if line.strip():  # Avoid empty lines
+                parts = line.split("\t")  # Assuming Hive outputs tab-separated results
+                table_name = parts[0]
+                count = int(parts[1])
+                hive_results.append((table_name, count))
+
+        # Append results to the CSV file
+        csv_file_name = 'hive_query_results.csv'
+        with open(csv_file_name, mode='a', newline='') as csv_file:
+            writer = csv.writer(csv_file)
+            # Write the header only if the file is empty
+            if csv_file.tell() == 0:
+                writer.writerow(["Hive_Table_Name", "Count"])  # Header row
+            for table_name, count in hive_results:
+                writer.writerow([table_name, count])
+
+        print(f"Hive query results appended to '{csv_file_name}'.")
+        return hive_results
+
+    except FileNotFoundError:
+        print(f"Query file '{query_file}' not found.")
+        return None
+    except subprocess.CalledProcessError as e:
+        print("There was an error executing the Hive query:", e)
+        return None
