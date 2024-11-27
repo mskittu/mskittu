@@ -1,3 +1,6 @@
+import cx_Oracle
+import csv
+
 def get_oracle_table_counts_from_file(query_file):
     try:
         # Oracle connection details
@@ -20,21 +23,26 @@ def get_oracle_table_counts_from_file(query_file):
 
         results = []
         for query in queries:
-            query = query.strip()  # Remove any leading/trailing whitespaces or newline characters
+            query = query.strip().rstrip(';')  # Remove trailing whitespace and semicolon
             if query:
+                # Extract the table name from the query
+                table_name = query.split("FROM")[1].strip()
                 print(f"Executing Oracle query: {query}")
                 cursor.execute(query)
                 result = cursor.fetchone()  # Fetch the result (COUNT)
-                results.append(result[0])  # Append count result
+                results.append((table_name, result[0]))  # Append table name and count result
 
-        # Save results to a CSV file
-        with open('oracle_query_results.csv', mode='w', newline='') as csv_file:
+        # Append results to the CSV file
+        csv_file_name = 'oracle_query_results.csv'
+        with open(csv_file_name, mode='a', newline='') as csv_file:
             writer = csv.writer(csv_file)
-            writer.writerow(["Query", "Count"])  # Header row
-            for query, count in zip(queries, results):
-                writer.writerow([query.strip(), count])
+            # Write the header only if the file is empty
+            if csv_file.tell() == 0:
+                writer.writerow(["Oracle_Table_Name", "Count"])  # Header row
+            for table_name, count in results:
+                writer.writerow([table_name, count])
 
-        print("Oracle query results saved to 'oracle_query_results.csv'.")
+        print(f"Oracle query results appended to '{csv_file_name}'.")
         return results
 
     except cx_Oracle.DatabaseError as e:
