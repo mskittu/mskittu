@@ -1,0 +1,119 @@
+import os
+import csv
+import cx_Oracle
+import subprocess
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from email.mime.base import MIMEBase
+from email import encoders
+import socket
+
+oracle_query_file = '/apps/tenant_local/usrf_stg/HadoopSandbox/x01532741/job/fin_recon/mds_daily_tbl_recon/0.9/conf/query_file.txt'
+compare_csv_file = '/apps/tenant_local/usrf_stg/HadoopSandbox/x01532741/job/fin_recon/mds_daily_tbl_recon/0.9/source/compare.csv'
+
+def environmentval():
+    edgenode_env = socket.gethostname()[:4]
+
+    if edgenode_env == "ddas":
+        mailto = "UAT87@mo-collab.barclayscorp.com"
+    elif edgenode_env == "dqas":
+        mailto = "UAT87@mo-collab.barclayscorp.com"
+    elif edgenode_env == "dpas":
+        mailto = "IDTeamImpairment@barclays.com,USCDSRTBTEAM@barclays.com"
+    else:
+        raise ValueError("Unknown environment: " + edgenode_env)
+
+    os.environ["MAILTO"] = mailto
+    return mailto
+
+def send_email(subject, body, recipient, attachment_path):
+    try:
+        # Email details
+        sender_email = "your.email@example.com"  # Replace with sender's email
+        smtp_server = "smtp.example.com"         # Replace with SMTP server
+        smtp_port = 587                          # SMTP port
+        smtp_user = "your.smtp.username"         # Replace with SMTP username
+        smtp_password = "your.smtp.password"     # Replace with SMTP password
+
+        # Create email
+        msg = MIMEMultipart()
+        msg["From"] = sender_email
+        msg["To"] = recipient
+        msg["Subject"] = subject
+
+        # Add email body
+        msg.attach(MIMEText(body, "plain"))
+
+        # Attach file
+        with open(attachment_path, "rb") as attachment:
+            part = MIMEBase("application", "octet-stream")
+            part.set_payload(attachment.read())
+        encoders.encode_base64(part)
+        part.add_header(
+            "Content-Disposition",
+            f"attachment; filename={os.path.basename(attachment_path)}",
+        )
+        msg.attach(part)
+
+        # Send email
+        with smtplib.SMTP(smtp_server, smtp_port) as server:
+            server.starttls()
+            server.login(smtp_user, smtp_password)
+            server.send_message(msg)
+
+        print(f"Email sent to {recipient} with attachment {attachment_path}")
+
+    except Exception as e:
+        print("Error sending email:", e)
+
+def get_oracle_table_counts_from_file(query_file):
+    # Oracle count retrieval logic (same as in the original code)
+
+def get_hive_table_count():
+    # Hive count retrieval logic (same as in the original code)
+
+def compare_counts(oracle_counts, hive_counts):
+    try:
+        with open(compare_csv_file, mode="a", newline="") as csv_file:
+            writer = csv.writer(csv_file)
+            if csv_file.tell() == 0:
+                writer.writerow(["Table_Name", "Oracle_Count", "Hive_Count", "Status"])
+
+            mismatches = []
+            for oracle_table, oracle_count in oracle_counts:
+                match = next((hc for hc in hive_counts if hc[0] == oracle_table), None)
+                if match:
+                    hive_table, hive_count = match
+                    status = "Match" if oracle_count == hive_count else "Mismatch"
+                    writer.writerow([oracle_table, oracle_count, hive_count, status])
+                    if status == "Mismatch":
+                        mismatches.append((oracle_table, oracle_count, hive_count))
+                else:
+                    writer.writerow([oracle_table, oracle_count, None, "Hive Table Missing"])
+                    mismatches.append((oracle_table, oracle_count, None))
+
+            if mismatches:
+                print("Mismatches found. Details appended to compare.csv.")
+            else:
+                print("Counts match for all tables.")
+
+    except Exception as e:
+        print("Error during comparison:", e)
+
+if __name__ == "__main__":
+    # Determine recipient email based on the environment
+    mailto = environmentval()
+
+    # Retrieve counts from Oracle and Hive
+    oracle_counts = get_oracle_table_counts_from_file(oracle_query_file)
+    hive_counts = get_hive_table_count()
+
+    # Compare counts and send email
+    if oracle_counts and hive_counts:
+        compare_counts(oracle_counts, hive_counts)
+
+        # Send email with the comparison CSV
+        subject = "Oracle vs Hive Table Count Comparison"
+        body = "Attached is the comparison sheet for Oracle and Hive table counts."
+        send_email(subject, body, mailto, compare_csv_file)
