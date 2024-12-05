@@ -1,0 +1,56 @@
+from datetime import datetime
+import csv
+
+if __name__ == "__main__":
+    try:
+        # Retrieve the email recipient based on the environment
+        mailto = environmental()
+
+        # Read data from compare.csv
+        compare_csv_file = "compare.csv"  # Path to your CSV file
+        table_data = []
+
+        with open(compare_csv_file, "r") as file:
+            csv_reader = csv.DictReader(file)
+            for row in csv_reader:
+                table_data.append({
+                    "Table_Name": row["Table_Name"],
+                    "Oracle_Count": row["Oracle_Count"],
+                    "Hive_Count": row["Hive_Count"],
+                    "Status": row["Status"],
+                })
+
+        # Generate the HTML table
+        rows = "".join(
+            f"<tr><td>{row['Table_Name']}</td><td>{row['Oracle_Count']}</td><td>{row['Hive_Count']}</td><td>{row['Status']}</td></tr>"
+            for row in table_data
+        )
+        html_table = f"""
+        <html>
+            <body>
+                <p>Please find below the comparison results between Oracle and Hive table counts:</p>
+                <table border="1" style="border-collapse: collapse; text-align: left;">
+                    <tr>
+                        <th>Table_Name</th>
+                        <th>Oracle_Count</th>
+                        <th>Hive_Count</th>
+                        <th>Status</th>
+                    </tr>
+                    {rows}
+                </table>
+            </body>
+        </html>
+        """
+
+        # Get today's date in "YYYY-MM-DD" format
+        today_date = datetime.now().strftime("%Y-%m-%d")
+
+        # Subject with today's date
+        subject = f"Oracle_and_Hive_Comparison_{today_date}"
+
+        # Send the results via email
+        body = html_table  # HTML-formatted body
+        send_email_with_attachment(subject, body, compare_csv_file, mailto, is_html=True)
+
+    except Exception as e:
+        print(f"Error during execution: {e}")
