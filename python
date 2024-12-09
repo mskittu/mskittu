@@ -2,9 +2,12 @@ import boto3
 import pandas as pd
 from io import StringIO
 
-def merge_selected_columns(source_bucket, target_bucket, source_files, target_file, column_mapping):
+def merge_selected_columns_with_filter(
+    source_bucket, target_bucket, source_files, target_file, column_mapping, filters
+):
     """
-    Merges selected columns from multiple CSV files into a single file and uploads to a target bucket.
+    Merges selected columns with filtering conditions from multiple CSV files into a single file 
+    and uploads to a target bucket.
 
     Args:
         source_bucket (str): Name of the source S3 bucket.
@@ -12,20 +15,27 @@ def merge_selected_columns(source_bucket, target_bucket, source_files, target_fi
         source_files (list): List of file names in the source bucket.
         target_file (str): Name of the resulting file in the target bucket.
         column_mapping (dict): Mapping of file names to the columns to select.
+        filters (dict): Mapping of file names to filter conditions as lambda functions.
     """
     # Initialize the S3 client
     s3 = boto3.client('s3')
 
-    # List to store dataframes
+    # List to store filtered dataframes
     dataframes = []
 
-    # Process each file and select specified columns
+    # Process each file
     for file_name, columns in column_mapping.items():
+        # Read the file and select specified columns
         obj = s3.get_object(Bucket=source_bucket, Key=file_name)
         df = pd.read_csv(obj['Body'], usecols=columns)
+
+        # Apply filtering condition if available
+        if file_name in filters:
+            df = df.query(filters[file_name])
+
         dataframes.append(df)
 
-    # Merge all dataframes into a single dataframe
+    # Merge all filtered dataframes into a single dataframe
     merged_df = pd.concat(dataframes, ignore_index=True)
 
     # Convert the merged dataframe to CSV
@@ -40,7 +50,7 @@ def merge_selected_columns(source_bucket, target_bucket, source_files, target_fi
 source_bucket = "s3-jde-epm-testvk"
 target_bucket = "s3-jde-epm-testvk-maergfiles"
 source_files = ["file1.csv", "file2.csv", "file3.csv"]  # Replace with actual file names
-target_file = "merged_selected_columns.csv"
+target_file = "merged_filtered_columns.csv"
 
 # Specify columns to select for each file
 column_mapping = {
@@ -49,5 +59,13 @@ column_mapping = {
     "file3.csv": ["column5", "column6"]   # Replace with actual columns for file3
 }
 
+# Specify filtering conditions as a dictionary
+# Example: "column1 > 50 and column2 == 'Active'"
+filters = {
+    "file1.csv": "column1 > 50 and column2 == 'Active'",  # Replace with condition for file1
+    "file2.csv": "column3 < 100",  # Replace with condition for file2
+    # Add conditions for file3 if needed
+}
+
 # Execute the function
-merge_selected_columns(source_bucket, target_bucket, source_files, target_file, column_mapping)
+merge_selected_columns_with_filter(source_bucket, target_bucket, source_files, target_file, column_mapping, filters)
