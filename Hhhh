@@ -1,0 +1,48 @@
+INSERT OVERWRITE TABLE usrf_pub_rtt_mdl.ifrs_pre_default_mrd PARTITION (ptn_val_txt='20241130')
+SELECT 
+    prv_acct_bid,
+    wgt,
+    sample_snp,
+    pltfm_snp,
+    product_group2,
+    (CASE 
+        WHEN ifrs.prv_acct_bid = '10000444' AND COALESCE(ifrs.line_snp, 0) IS NOT NULL 
+        THEN CAST(121.006000 AS DECIMAL(10,6)) 
+        ELSE CAST(ifrs.line_snp AS DECIMAL(10,6)) 
+     END) AS line_snp,
+    paybal_ratio_6mo,
+    (CASE 
+        WHEN ifrs.prv_acct_bid = '10001489' 
+        THEN CAST(15.000000 AS DECIMAL(10,6)) 
+        ELSE CAST(ifrs.ecm_1002_rat_bal AS DECIMAL(10,6))
+     END) AS ecm_1002_rat_bal,
+    util_snp,
+    fico_snp,
+    mob_nbr_num,
+    (CASE 
+        WHEN ifrs.prv_acct_bid = '10000216' 
+        THEN 5 
+        ELSE ifrs.ecm_0106_tot_num 
+     END) AS ecm_0106_tot_num,
+    app_0303_tot_num,
+    app_0202_tot_num,
+    app_1802_tot_bal,
+    ecm_0701_tot_num,
+    num_ca_snp_3mo,
+    line_dec_snp_6mo,
+    fico_crg,
+    app_0901_bkflg,
+    ecm_1802_tot_num,
+    (CASE 
+        WHEN ifrs.prv_acct_bid = '10001601' AND COALESCE(ifrs.num_la_snp, 0) IS NOT NULL 
+        THEN CAST(127755 AS BIGINT) 
+        ELSE CAST(ifrs.num_la_snp AS BIGINT)
+     END) AS num_la_snp,
+    app_1802_tot_num,
+    ecm_0601_tot_num,
+    (CASE 
+        WHEN ifrs.prv_acct_bid = '10001296' 
+        THEN 1 
+        ELSE ifrs.ecm_0601_tot_num 
+     END) AS ecm_0601_tot_num
+FROM ifrs_source_table AS ifrs;
