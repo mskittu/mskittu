@@ -1,1 +1,191 @@
-ssskk
+import os
+import cx_Oracle
+import pandas as pd
+import subprocess
+from pyspark.sql import SparkSession
+
+# Initialize SparkSession
+spark = SparkSession.builder \
+    .appName("PPNR Accuracy Report") \
+    .getOrCreate()
+
+def fetch_pcds_data(attributes, pcds_table, output_path):
+    try:
+        # Oracle connection details
+        db_name = "CDS"
+        user_var = f"USERNAME_{db_name}"
+        passwd_var = f"PWD_{db_name}"
+        service_var = f"CONNECT_STRING_{db_name}"
+        user_name = os.environ.get(user_var)
+        passwd = os.environ.get(passwd_var)
+        service_nm = os.environ.get(service_var)
+
+        if not all([user_name, passwd, service_nm]):
+            raise ValueError("Oracle environment variables are not set.")
+
+        # Parse the service string
+        service_nm = service_nm[service_nm.index('@') + 1:]
+        host = service_nm[0:service_nm.index(':')]
+        port = service_nm[service_nm.index(':') + 1:service_nm.index('/')]
+        service_nm = service_nm[service_nm.index('/') + 1:]
+
+        # Create a DSN
+        dsn = cx_Oracle.makedsn(host, port, service_name=service_nm)
+
+        # Establish a connection
+        connection = cx_Oracle.connect(user=user_name, password=passwd, dsn=dsn)
+        cursor = connection.cursor()
+
+        # Construct SQL query
+        attributes_str = ", ".join(attributes)
+        query = f"""
+        SELECT acct_bid AS ACCT_BID, {attributes_str}
+        FROM {pcds_table}
+        WHERE ROWNUM <= 100
+        """
+        cursor.execute(query)
+        rows = cursor.fetchall()
+
+        # Create DataFrame
+        columns = [desc[0] for desc in cursor.description]
+        data_df = pd.DataFrame(rows, columns=columns)
+
+        cursor.close()
+        connection.close()
+
+        if data_df.empty:
+            raise ValueError("PCDS query returned no data.")
+
+        # Save PCDS data to CSV
+        data_df.to_csv(output_path, index=False)
+        print(f"Fetched {len(data_df)} records from PCDS and saved to {output_path}")
+
+        # Verify file creation
+        if not os.path.exists(output_path):
+            raise FileNotFoundError(f"The file {output_path} does not exist after saving.")
+
+        return data_df
+
+    except Exception as e:
+        print(f"Error while fetching data from PCDS: {e}")
+        raise
+
+def fetch_hive_data(local_path):
+    try:
+        # Hive query with LIMIT 100
+        hive_query = """
+        SELECT extrnl_acct_id, past_due_151_180_amt 
+        FROM usrf_in.cds_acct_c
+        LIMIT 100
+        """
+
+        # Execute Hive query and capture output
+        hive_command = f"hive -e \"{hive_query}\""
+        result = subprocess.run(hive_command, shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+
+        # Split the query output into rows
+        rows = [line.split('\t') for line in result.stdout.strip().split('\n')]
+
+        # Save to a CSV file
+        if rows:
+            hive_columns = ["EXTRNL_ACCT_ID", "PAST_DUE_151_180_AMT"]
+            hive_df = pd.DataFrame(rows, columns=hive_columns)
+            hive_df.to_csv(local_path, index=False)
+            print(f"Hive data saved to {local_path}")
+
+            # Verify file creation
+            if not os.path.exists(local_path):
+                raise FileNotFoundError(f"The file {local_path} does not exist after saving.")
+
+            return hive_df
+        else:
+            raise ValueError("Hive query returned no data.")
+
+    except subprocess.CalledProcessError as e:
+        print(f"Error executing Hive query: {e.stderr}")
+        raise
+
+    except Exception as e:
+        print(f"Error processing Hive output: {e}")
+        raise
+
+def compare_data():
+    try:
+        # Fixed full paths for PCDS and Hive data
+        pcds_data_full_path = "file:///apps/tenant_local/usrf_stg/HadoopSandbox/x01532741/job/fin_recon/pcds_data.csv"
+        hive_data_full_path = "file:///apps/tenant_local/usrf_stg/HadoopSandbox/x01532741/job/fin_recon/hive_data.csv"
+
+        # Verify file existence
+        if not os.path.exists("/apps/tenant_local/usrf_stg/HadoopSandbox/x01532741/job/fin_recon/pcds_data.csv"):
+            raise FileNotFoundError("The file /apps/tenant_local/usrf_stg/HadoopSandbox/x01532741/job/fin_recon/pcds_data.csv does not exist.")
+        if not os.path.exists("/apps/tenant_local/usrf_stg/HadoopSandbox/x01532741/job/fin_recon/hive_data.csv"):
+            raise FileNotFoundError("The file /apps/tenant_local/usrf_stg/HadoopSandbox/x01532741/job/fin_recon/hive_data.csv does not exist.")
+
+        # Read PCDS data from local path
+        pcds_source_df = spark.read.csv(pcds_data_full_path, header=True, inferSchema=True) \
+            .withColumnRenamed("ACCT_BID", "EXTRNL_ACCT_ID")  # Rename column for consistency
+
+        # Read Hive data from local path
+        hive_target_df = spark.read.csv(hive_data_full_path, header=True, inferSchema=True)
+
+        # Validate columns
+        required_columns = {"EXTRNL_ACCT_ID", "PAST_DUE_151_180_AMT"}
+        if not required_columns.issubset(set(pcds_source_df.columns)):
+            raise ValueError(f"PCDS data missing required columns: {required_columns - set(pcds_source_df.columns)}")
+        if not required_columns.issubset(set(hive_target_df.columns)):
+            raise ValueError(f"Hive data missing required columns: {required_columns - set(hive_target_df.columns)}")
+
+        # Compare data
+        mismatches = pcds_source_df.join(hive_target_df, "EXTRNL_ACCT_ID", how="outer") \
+            .filter((pcds_source_df["PAST_DUE_151_180_AMT"] != hive_target_df["PAST_DUE_151_180_AMT"]) |
+                    (pcds_source_df["EXTRNL_ACCT_ID"].isNull()) |
+                    (hive_target_df["EXTRNL_ACCT_ID"].isNull()))
+
+        return mismatches
+
+    except Exception as e:
+        print(f"Error during data comparison: {e}")
+        raise
+
+def generate_accuracy_report(mismatches, total_records, final_report_path):
+    try:
+        mismatch_count = mismatches.count()
+        accuracy = 100 if total_records == 0 else (1 - mismatch_count / total_records) * 100
+
+        # Append results to the final accuracy report
+        with open(final_report_path, "a") as report_file:
+            report_file.write(f"Accuracy: {accuracy:.2f}%\n")
+            report_file.write(f"Total Records: {total_records}, Mismatches: {mismatch_count}\n\n")
+
+        print(f"Accuracy report updated: {accuracy:.2f}%")
+        return accuracy
+
+    except Exception as e:
+        print(f"Error generating accuracy report: {e}")
+        raise
+
+# Main Execution
+final_report_path = "/apps/tenant_local/usrf_stg/HadoopSandbox/x01532741/job/fin_recon/ppnr_accuracy_report.csv"
+
+# Clear existing accuracy report
+open(final_report_path, "w").close()
+
+try:
+    # Fetch PCDS Data and Save
+    fetch_pcds_data(["PAST_DUE_151_180_AMT"], "asp_eom_acct_sum", "/apps/tenant_local/usrf_stg/HadoopSandbox/x01532741/job/fin_recon/pcds_data.csv")
+
+    # Fetch Hive Data and Save
+    fetch_hive_data("/apps/tenant_local/usrf_stg/HadoopSandbox/x01532741/job/fin_recon/hive_data.csv")
+
+    # Compare Data
+    mismatches = compare_data()
+
+    # Generate Accuracy Report
+    generate_accuracy_report(mismatches, 100, final_report_path)
+
+    print(f"Final PPNR Accuracy Report saved at {final_report_path}")
+
+except Exception as e:
+    print(f"Error during execution: {e}")
+
+spark.stop()
