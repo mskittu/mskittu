@@ -1,7 +1,8 @@
 import os
-import cx_Oracle
 import pandas as pd
+import cx_Oracle
 import subprocess
+
 
 def fetch_pcds_data(attributes, pcds_table, output_path):
     try:
@@ -60,6 +61,7 @@ def fetch_pcds_data(attributes, pcds_table, output_path):
         print(f"Error while fetching data from PCDS: {e}")
         raise
 
+
 def fetch_hive_data(output_path):
     try:
         # Hive query with LIMIT 100
@@ -94,6 +96,24 @@ def fetch_hive_data(output_path):
         print(f"Error processing Hive output: {e}")
         raise
 
+
+def clean_hive_data(hive_data_path):
+    try:
+        # Load the Hive data
+        hive_data = pd.read_csv(hive_data_path, error_bad_lines=False, warn_bad_lines=True)
+
+        # Remove rows containing invalid elements or attributes
+        hive_data = hive_data[~hive_data.astype(str).apply(lambda x: x.str.contains("onMismatch")).any(axis=1)]
+
+        # Save the cleaned Hive data back to the file
+        hive_data.to_csv(hive_data_path, index=False)
+        print(f"Cleaned Hive data saved to {hive_data_path}")
+
+    except Exception as e:
+        print(f"Error while cleaning Hive data: {e}")
+        raise
+
+
 def compare_and_generate_report(pcds_data_path, hive_data_path, report_path):
     try:
         # Read PCDS and Hive data directly using Pandas
@@ -127,6 +147,7 @@ def compare_and_generate_report(pcds_data_path, hive_data_path, report_path):
         print(f"Error generating accuracy report: {e}")
         raise
 
+
 # Main Execution
 base_path = "/apps/tenant_local/usrf_stg/HadoopSandbox/x01532741/job/fin_recon"
 
@@ -140,6 +161,9 @@ try:
 
     # Fetch Hive Data and Save to Local Path
     fetch_hive_data(f"{base_path}/hive_data.csv")
+
+    # Clean Hive Data
+    clean_hive_data(f"{base_path}/hive_data.csv")
 
     # Compare Data and Generate Report
     compare_and_generate_report(
