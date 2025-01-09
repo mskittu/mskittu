@@ -5,51 +5,51 @@ WITH extracted_ids AS (
     FETCH FIRST 1000 ROWS ONLY
 )
 
--- Step 2: Query attributes from all Hive tables using the same 1000 IDs
+-- Step 2: Query attributes from all PCDS tables using the same 1000 IDs
 SELECT 
-    -- Attributes from Hive table ingest.CDS_ASP_EOM_ACCT_SUM
-    t1.EXTNL_ACCT_ID AS EXTNL_ACCT_ID,
-    t1.cd41 AS cd41,
-    t1.any_chrgoff_ever_flag AS any_chrgoff_ever_flag,
-    t1.cash_advnc_cnt AS cash_advnc_cnt,
-    t1.revl_flag AS revl_flag,
-    t1.scrtzn_pool_cd AS scrtzn_pool_cd,
-    t1.end_of_prd_abl_amt AS end_of_prd_abl_amt,
-    t1.dlnqt_cd AS dlnqt_cd,
-    t1.cr_lmt_amt AS cr_lmt_amt_asp,
+    -- Attributes from PCDS table dmt_asp_dba.asp_eom_acct_sum
+    p1.EXTNL_ACCT_ID AS EXTNL_ACCT_ID,
+    p1.cd41 AS cd41,
+    p1.any_chrgoff_ever_flag AS any_chrgoff_ever_flag,
+    p1.cash_advnc_cnt AS cash_advnc_cnt,
+    p1.revl_flag AS revl_flag,
+    p1.scrtzn_pool_cd AS scrtzn_pool_cd,
+    p1.end_of_prd_abl_amt AS end_of_prd_abl_amt,
+    p1.dlnqt_cd AS dlnqt_cd,
+    p1.cr_lmt_amt AS cr_lmt_amt_asp,
 
-    -- Attributes from Hive table rft_ingest.cds_acct_c
-    t2.cr_lmt_amt AS cr_lmt_amt_fmt,
+    -- Attributes from PCDS table fmt_acct_dba.fmt_acct_c
+    p2.cr_lmt_amt AS cr_lmt_amt_fmt,
 
-    -- Attributes from Hive table ingest.apply_anlys_mix_full_base
-    t3.abv106_rtnmtot AS abv106_rtnmtot,
-    t3.cbv96_colinq AS cbv96_colinq,
-    t3.mosinceoldesttradeopened AS mosinceoldesttradeopened,
-    t3.tu_s004 AS tu_s004,
+    -- Attributes from PCDS table fmt_appl_dba.appl_anlys_mixed_fact
+    p3.abv106_rtnmtot AS abv106_rtnmtot,
+    p3.cbv96_colinq AS cbv96_colinq,
+    p3.mosinceoldesttradeopened AS mosinceoldesttradeopened,
+    p3.tu_s004 AS tu_s004,
 
-    -- Attributes from Hive table rft_ingest.cds_dma_cr_burau_tru_c
-    t4.mtgbal AS mtgbal,
-    t4.sixtdelinquencycount AS sixtdelinquencycount,
-    t4.totinquiriescount AS totinquiriescount,
-    t4.totnumopenbankrevtradeverif6mo AS totnumopenbankrevtradeverif6mo,
-    t4.totnumopenrevtradeverif6mo AS totnumopenrevtradeverif6mo,
-    t4.totnumastisfactorytrade AS totnumastisfactorytrade,
-    t4.revutilizationamount_xj AS revutilizationamount_xj
+    -- Attributes from PCDS table dma_demo_dba.dma_cr_burau_tru_c
+    p4.mtgbal AS mtgbal,
+    p4.sixtdelinquencycount AS sixtdelinquencycount,
+    p4.totinquiriescount AS totinquiriescount,
+    p4.totnumopenbankrevtradeverif6mo AS totnumopenbankrevtradeverif6mo,
+    p4.totnumopenrevtradeverif6mo AS totnumopenrevtradeverif6mo,
+    p4.totnumastisfactorytrade AS totnumastisfactorytrade,
+    p4.revutilizationamount_xj AS revutilizationamount_xj
 
 FROM 
-    -- Join for ingest.CDS_ASP_EOM_ACCT_SUM
+    -- Join for PCDS table dmt_asp_dba.asp_eom_acct_sum
     extracted_ids ei
-    LEFT JOIN ingest.cds_asp_eom_acct_sum t1
-        ON ei.EXTNL_ACCT_ID = t1.EXTNL_ACCT_ID
+    LEFT JOIN dmt_asp_dba.asp_eom_acct_sum p1
+        ON ei.EXTNL_ACCT_ID = p1.EXTNL_ACCT_ID
 
-    -- Join for rft_ingest.cds_acct_c
-    LEFT JOIN rft_ingest.cds_acct_c t2
-        ON ei.EXTNL_ACCT_ID = t2.EXTNL_ACCT_ID
+    -- Join for PCDS table fmt_acct_dba.fmt_acct_c
+    LEFT JOIN fmt_acct_dba.fmt_acct_c p2
+        ON ei.EXTNL_ACCT_ID = p2.EXTNL_ACCT_ID
 
-    -- Join for ingest.apply_anlys_mix_full_base
-    LEFT JOIN ingest.apply_anlys_mix_full_base t3
-        ON ei.EXTNL_ACCT_ID = t3.EXTNL_ACCT_ID
+    -- Join for PCDS table fmt_appl_dba.appl_anlys_mixed_fact
+    LEFT JOIN fmt_appl_dba.appl_anlys_mixed_fact p3
+        ON ei.EXTNL_ACCT_ID = p3.EXTNL_ACCT_ID
 
-    -- Join for rft_ingest.cds_dma_cr_burau_tru_c
-    LEFT JOIN rft_ingest.cds_dma_cr_burau_tru_c t4
-        ON ei.EXTNL_ACCT_ID = t4.EXTNL_ACCT_ID;
+    -- Join for PCDS table dma_demo_dba.dma_cr_burau_tru_c
+    LEFT JOIN dma_demo_dba.dma_cr_burau_tru_c p4
+        ON ei.EXTNL_ACCT_ID = p4.EXTNL_ACCT_ID;
