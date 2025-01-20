@@ -1,1 +1,183 @@
-ssskk
+import os
+import pandas as pd
+import cx_Oracle
+import subprocess
+
+def fetch_data_from_oracle(attributes, table_name, output_path, db_config):
+    try:
+        # Extract database configuration
+        user_var = db_config.get("user_var")
+        passwd_var = db_config.get("passwd_var")
+        service_var = db_config.get("service_var")
+
+        user_name = os.environ.get(user_var)
+        passwd = os.environ.get(passwd_var)
+        service_nm = os.environ.get(service_var)
+
+        if not all([user_name, passwd, service_nm]):
+            raise ValueError("Oracle environment variables are not set.")
+
+        # Parse the service string
+        service_nm = service_nm[service_nm.index('@') + 1:]
+        host = service_nm[0:service_nm.index(':')]
+        port = service_nm[service_nm.index(':') + 1:service_nm.index('/')]
+        service_nm = service_nm[service_nm.index('/') + 1:]
+
+        # Create a DSN
+        dsn = cx_Oracle.makedsn(host, port, service_name=service_nm)
+
+        # Establish a connection
+        connection = cx_Oracle.connect(user=user_name, password=passwd, dsn=dsn)
+        cursor = connection.cursor()
+
+        # Construct SQL query
+        attributes_str = ", ".join(attributes)
+        query = f"""
+        SELECT {attributes_str}
+        FROM {table_name}
+        WHERE ROWNUM <= 100
+        """
+        cursor.execute(query)
+        rows = cursor.fetchall()
+
+        # Create DataFrame
+        columns = [desc[0] for desc in cursor.description]
+        data_df = pd.DataFrame(rows, columns=columns)
+
+        cursor.close()
+        connection.close()
+
+        if data_df.empty:
+            raise ValueError("Oracle query returned no data.")
+
+        # Save data to the specified path
+        data_df.to_csv(output_path, index=False)
+        print(f"Fetched {len(data_df)} records from Oracle and saved to {output_path}")
+
+        return data_df
+
+    except Exception as e:
+        print(f"Error while fetching data from Oracle: {e}")
+        raise
+
+def fetch_data_from_hive(hive_query, output_path):
+    try:
+        # Execute Hive query and capture output
+        hive_command = f"hive -e \"{hive_query}\""
+        result = subprocess.run(hive_command, shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+
+        # Split the query output into rows
+        rows = [line.split('\t') for line in result.stdout.strip().split('\n')]
+
+        if rows:
+            # Infer column names from query (manual adjustment might be needed)
+            hive_columns = ["COLUMN_" + str(i + 1) for i in range(len(rows[0]))]
+            hive_df = pd.DataFrame(rows, columns=hive_columns)
+            hive_df.to_csv(output_path, index=False)
+            print(f"Hive data saved to {output_path}")
+            return hive_df
+        else:
+            raise ValueError("Hive query returned no data.")
+
+    except subprocess.CalledProcessError as e:
+        print(f"Error executing Hive query: {e.stderr}")
+        raise
+
+    except Exception as e:
+        print(f"Error processing Hive output: {e}")
+        raise
+
+def clean_data(file_path, invalid_value):
+    try:
+        # Load the data
+        data_df = pd.read_csv(file_path, error_bad_lines=False, warn_bad_lines=True)
+
+        # Remove rows containing invalid elements or attributes
+        data_df = data_df[~data_df.astype(str).apply(lambda x: x.str.contains(invalid_value, na=False)).any(axis=1)]
+
+        # Save the cleaned data back to the file
+        data_df.to_csv(file_path, index=False)
+        print(f"Cleaned data saved to {file_path}")
+
+    except Exception as e:
+        print(f"Error while cleaning data: {e}")
+        raise
+
+def compare_and_generate_report(data1_path, data2_path, report_path, join_keys, compare_columns):
+    try:
+        # Load datasets
+        df1 = pd.read_csv(data1_path)
+        df2 = pd.read_csv(data2_path)
+
+        # Ensure key columns have the same data type
+        for key in join_keys:
+            df1[key] = df1[key].astype(str)
+            df2[key] = df2[key].astype(str)
+
+        # Merge datasets
+        merged_df = pd.merge(
+            df1.rename(columns={compare_columns[0]: "SRC_COLUMN"}),
+            df2.rename(columns={compare_columns[1]: "TGT_COLUMN"}),
+            on=join_keys,
+            how="outer"
+        )
+
+        # Compare data
+        merged_df["STATUS"] = merged_df.apply(
+            lambda row: "PASS" if row["SRC_COLUMN"] == row["TGT_COLUMN"] else "FAILED",
+            axis=1
+        )
+
+        # Save the final report
+        report_df = merged_df[join_keys + ["STATUS", "SRC_COLUMN", "TGT_COLUMN"]].fillna("")
+        report_df.to_csv(report_path, index=False)
+        print(f"Comparison report saved to {report_path}")
+
+    except Exception as e:
+        print(f"Error generating comparison report: {e}")
+        raise
+
+# Example Execution
+if __name__ == "__main__":
+    try:
+        base_path = "./data_pipeline"
+        os.makedirs(base_path, exist_ok=True)
+
+        # Oracle DB configuration
+        oracle_config = {
+            "user_var": "ORACLE_USER",
+            "passwd_var": "ORACLE_PASS",
+            "service_var": "ORACLE_SERVICE"
+        }
+
+        # Fetch Oracle Data
+        fetch_data_from_oracle(
+            attributes=["COLUMN_1", "COLUMN_2"],
+            table_name="example_table",
+            output_path=f"{base_path}/oracle_data.csv",
+            db_config=oracle_config
+        )
+
+        # Fetch Hive Data
+        fetch_data_from_hive(
+            hive_query="SELECT COLUMN_1, COLUMN_2 FROM example_hive_table LIMIT 100",
+            output_path=f"{base_path}/hive_data.csv"
+        )
+
+        # Clean Hive Data
+        clean_data(
+            file_path=f"{base_path}/hive_data.csv",
+            invalid_value="onMismatch"
+        )
+
+        # Compare Data and Generate Report
+        compare_and_generate_report(
+            data1_path=f"{base_path}/oracle_data.csv",
+            data2_path=f"{base_path}/hive_data.csv",
+            report_path=f"{base_path}/comparison_report.csv",
+            join_keys=["COLUMN_1"],
+            compare_columns=["COLUMN_2", "COLUMN_2"]
+        )
+
+    except Exception as e:
+        print(f"Error during execution: {e}")
