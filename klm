@@ -1,1 +1,81 @@
-ssskk
+import pandas as pd
+
+def compare_and_generate_report(pcds_data_path, hive_data_path, report_path):
+    try:
+        # Read PCDS and Hive data directly using Pandas
+        pcds_df = pd.read_csv(pcds_data_path)
+        hive_df = pd.read_csv(hive_data_path)
+
+        # Debug: Print column names to verify
+        print("Original PCDS Columns:", pcds_df.columns.tolist())
+        print("Original Hive Columns:", hive_df.columns.tolist())
+
+        # Normalize column names to avoid issues with spaces and case sensitivity
+        pcds_df.columns = pcds_df.columns.str.strip().str.upper()
+        hive_df.columns = hive_df.columns.str.strip().str.upper()
+
+        print("Normalized PCDS Columns:", pcds_df.columns.tolist())
+        print("Normalized Hive Columns:", hive_df.columns.tolist())
+
+        # Ensure ACCT_BID and EXTRNL_ACCT_ID have the same data type
+        if "ACCT_BID" not in pcds_df.columns or "EXTRNL_ACCT_ID" not in hive_df.columns:
+            raise ValueError("Key columns 'ACCT_BID' or 'EXTRNL_ACCT_ID' not found in the datasets after normalization.")
+
+        pcds_df["ACCT_BID"] = pcds_df["ACCT_BID"].astype(str)
+        hive_df["EXTRNL_ACCT_ID"] = hive_df["EXTRNL_ACCT_ID"].astype(str)
+
+        # Find common columns for comparison
+        common_columns = list(set(pcds_df.columns).intersection(hive_df.columns))
+        common_columns = [col for col in common_columns if col not in ["ACCT_BID", "EXTRNL_ACCT_ID"]]
+
+        # Dynamically rename columns with _src and _tgt suffixes
+        pcds_renamed = {col: f"{col}_src" for col in common_columns}
+        hive_renamed = {col: f"{col}_tgt" for col in common_columns}
+
+        # Merge and compare data
+        merged_df = pd.merge(
+            pcds_df.rename(columns=pcds_renamed),
+            hive_df.rename(columns=hive_renamed),
+            left_on="ACCT_BID", right_on="EXTRNL_ACCT_ID",
+            how="outer"
+        )
+
+        # Add a single status column to indicate if all common columns match
+        def determine_status(row):
+            for column in common_columns:
+                src_col = f"{column}_src"
+                tgt_col = f"{column}_tgt"
+                if row[src_col] != row[tgt_col]:
+                    return "FAILED"
+            return "PASS"
+
+        merged_df["status"] = merged_df.apply(determine_status, axis=1)
+
+        # Save the final report with required columns
+        final_report_columns = ["EXTRNL_ACCT_ID", "status"] + \
+                               [f"{col}_src" for col in common_columns] + \
+                               [f"{col}_tgt" for col in common_columns]
+
+        final_report_df = merged_df[final_report_columns].fillna("")
+        final_report_df.to_csv(report_path, index=False)
+        print(f"Final PPNR Accuracy Report saved to {report_path}")
+
+    except Exception as e:
+        print(f"Error generating accuracy report: {e}")
+        raise
+
+# Main Execution
+base_path = "/apps/tenant_local/usrf_stg/HadoopSandbox/x01532741/job/fin_recon"
+
+try:
+    # Compare Data and Generate Report
+    compare_and_generate_report(
+        f"{base_path}/pcds_data.csv",
+        f"{base_path}/hive_data.csv",
+        f"{base_path}/ppnr_accuracy_report.csv"
+    )
+
+    print(f"Final PPNR Accuracy Report saved to {base_path}/ppnr_accuracy_report.csv")
+
+except Exception as e:
+    print(f"Error during execution: {e}")
