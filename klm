@@ -1,1 +1,87 @@
-ssskk
+import pandas as pd
+from openpyxl import Workbook
+from openpyxl.styles import PatternFill
+from openpyxl.utils.dataframe import dataframe_to_rows
+from openpyxl import load_workbook
+
+def compare_and_generate_report(pcds_data_path, hive_data_path, report_path):
+    try:
+        # Read PCDS and Hive data directly using Pandas
+        pcds_df = pd.read_csv(pcds_data_path)
+        hive_df = pd.read_csv(hive_data_path)
+
+        # Normalize column names to avoid issues with spaces and case sensitivity
+        pcds_df.columns = pcds_df.columns.str.strip().str.upper()
+        hive_df.columns = hive_df.columns.str.strip().str.upper()
+
+        # Ensure EXTNL_ACCT_ID exists in both datasets
+        if "EXTNL_ACCT_ID" not in pcds_df.columns or "EXTNL_ACCT_ID" not in hive_df.columns:
+            raise ValueError("Key column 'EXTNL_ACCT_ID' not found in the datasets after normalization.")
+
+        pcds_df["EXTNL_ACCT_ID"] = pcds_df["EXTNL_ACCT_ID"].astype(str)
+        hive_df["EXTNL_ACCT_ID"] = hive_df["EXTNL_ACCT_ID"].astype(str)
+
+        # Find common columns for comparison
+        common_columns = list(set(pcds_df.columns).intersection(hive_df.columns))
+        common_columns = [col for col in common_columns if col != "EXTNL_ACCT_ID"]
+
+        # Dynamically rename columns with _src and _tgt suffixes
+        pcds_renamed = {col: f"{col}_src" for col in common_columns}
+        hive_renamed = {col: f"{col}_tgt" for col in common_columns}
+
+        # Merge and compare data
+        merged_df = pd.merge(
+            pcds_df.rename(columns=pcds_renamed),
+            hive_df.rename(columns=hive_renamed),
+            left_on="EXTNL_ACCT_ID", right_on="EXTNL_ACCT_ID",
+            how="outer"
+        )
+
+        # Add a single status column to indicate if all common columns match
+        def determine_status(row):
+            for column in common_columns:
+                src_col = f"{column}_src"
+                tgt_col = f"{column}_tgt"
+                if row.get(src_col) != row.get(tgt_col):
+                    return "FAILED"
+            return "PASS"
+
+        merged_df["status"] = merged_df.apply(determine_status, axis=1)
+
+        # Save the final report with required columns in the desired order
+        final_report_columns = ["EXTNL_ACCT_ID", "status"]
+        for col in common_columns:
+            final_report_columns.append(f"{col}_src")
+            final_report_columns.append(f"{col}_tgt")
+
+        final_report_df = merged_df[final_report_columns].fillna("")
+
+        # Create an Excel file with formatting
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "PPNR Accuracy Report"
+
+        # Write DataFrame rows to the worksheet
+        for row in dataframe_to_rows(final_report_df, index=False, header=True):
+            ws.append(row)
+
+        # Apply conditional formatting for status column
+        status_col_idx = final_report_df.columns.get_loc("status") + 1  # Excel is 1-based
+        red_fill = PatternFill(start_color="FFCCCC", end_color="FFCCCC", fill_type="solid")
+        green_fill = PatternFill(start_color="CCFFCC", end_color="CCFFCC", fill_type="solid")
+
+        for row_idx, cell in enumerate(ws.iter_cols(min_col=status_col_idx, max_col=status_col_idx, min_row=2, max_row=ws.max_row), start=2):
+            for c in cell:
+                if c.value == "FAILED":
+                    c.fill = red_fill
+                elif c.value == "PASS":
+                    c.fill = green_fill
+
+        # Save the Excel file
+        excel_report_path = report_path.replace(".csv", ".xlsx")
+        wb.save(excel_report_path)
+        print(f"Final PPNR Accuracy Report saved to {excel_report_path}")
+
+    except Exception as e:
+        print(f"Error generating accuracy report: {e}")
+        raise
