@@ -1,1 +1,219 @@
 
+import os
+import pandas as pd
+import cx_Oracle
+import subprocess
+from openpyxl import Workbook
+from openpyxl.styles import PatternFill
+from openpyxl.utils.dataframe import dataframe_to_rows
+
+def fetch_pcds_data(output_path):
+    try:
+        # Oracle connection details
+        db_name = "CDS"
+        user_var = f"USERNAME_{db_name}"
+        passwd_var = f"PWD_{db_name}"
+        service_var = f"CONNECT_STRING_{db_name}"
+        user_name = os.environ.get(user_var)
+        passwd = os.environ.get(passwd_var)
+        service_nm = os.environ.get(service_var)
+
+        if not all([user_name, passwd, service_nm]):
+            raise ValueError("Oracle environment variables are not set.")
+
+        # Parse the service string
+        service_nm = service_nm[service_nm.index('@') + 1:]
+        host = service_nm[:service_nm.index(':')]
+        port = service_nm[service_nm.index(':') + 1:service_nm.index('/')]
+        service_nm = service_nm[service_nm.index('/') + 1:]
+
+        # Create a DSN
+        dsn = cx_Oracle.makedsn(host, port, service_name=service_nm)
+
+        # Establish a connection
+        connection = cx_Oracle.connect(user=user_name, password=passwd, dsn=dsn)
+        cursor = connection.cursor()
+
+        # Hardcoded SQL query
+        query = """
+        SELECT EXTNL_ACCT_ID, PAST_DUE_151_180_AMT
+        FROM dmt_asp_dba.asp_eom_acct_sum
+        WHERE ROWNUM <= 1000
+        """
+        cursor.execute(query)
+        rows = cursor.fetchall()
+
+        # Create DataFrame
+        columns = [desc[0] for desc in cursor.description]
+        data_df = pd.DataFrame(rows, columns=columns)
+
+        cursor.close()
+        connection.close()
+
+        if data_df.empty:
+            raise ValueError("PCDS query returned no data.")
+
+        # Save PCDS data to the specified path
+        data_df.to_csv(output_path, index=False)
+        print(f"Fetched {len(data_df)} records from PCDS and saved to {output_path}")
+
+        return data_df
+
+    except Exception as e:
+        print(f"Error while fetching data from PCDS: {e}")
+        raise
+
+def fetch_hive_data(output_path):
+    try:
+        # Hive query with LIMIT 1000
+        hive_query = """
+        SELECT EXTNL_ACCT_ID, past_due_151_180_amt
+        FROM usrf_ingest.cds_acct_c
+        LIMIT 1000
+        """
+
+        # Execute Hive query and capture output
+        hive_command = f"hive -e \"{hive_query}\""
+        result = subprocess.run(hive_command, shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+
+        # Parse Hive output
+        rows = [line.split('\t') for line in result.stdout.strip().split('\n')]
+
+        # Save Hive data to the specified path
+        if rows:
+            hive_columns = ["EXTNL_ACCT_ID", "past_due_151_180_amt"]
+            hive_df = pd.DataFrame(rows, columns=hive_columns)
+            hive_df.to_csv(output_path, index=False)
+            print(f"Hive data saved to {output_path}")
+            return hive_df
+        else:
+            raise ValueError("Hive query returned no data.")
+
+    except subprocess.CalledProcessError as e:
+        print(f"Error executing Hive query: {e.stderr}")
+        raise
+
+    except Exception as e:
+        print(f"Error processing Hive output: {e}")
+        raise
+
+def clean_hive_data(hive_data_path):
+    try:
+        # Load the Hive data
+        hive_data = pd.read_csv(hive_data_path, error_bad_lines=False, warn_bad_lines=True)
+
+        # Remove rows containing invalid elements or attributes
+        hive_data = hive_data[~hive_data.astype(str).apply(lambda x: x.str.contains("onMismatch", na=False)).any(axis=1)]
+
+        # Save the cleaned Hive data back to the file
+        hive_data.to_csv(hive_data_path, index=False)
+        print(f"Cleaned Hive data saved to {hive_data_path}")
+
+    except Exception as e:
+        print(f"Error while cleaning Hive data: {e}")
+        raise
+
+def compare_and_generate_report(pcds_data_path, hive_data_path, report_path):
+    try:
+        # Read PCDS and Hive data
+        pcds_df = pd.read_csv(pcds_data_path)
+        hive_df = pd.read_csv(hive_data_path)
+
+        # Normalize column names to avoid issues with spaces and case sensitivity
+        pcds_df.columns = pcds_df.columns.str.strip().str.upper()
+        hive_df.columns = hive_df.columns.str.strip().str.upper()
+
+        # Ensure EXTNL_ACCT_ID exists in both datasets
+        if "EXTNL_ACCT_ID" not in pcds_df.columns or "EXTNL_ACCT_ID" not in hive_df.columns:
+            raise ValueError("Key column 'EXTNL_ACCT_ID' not found in the datasets after normalization.")
+
+        pcds_df["EXTNL_ACCT_ID"] = pcds_df["EXTNL_ACCT_ID"].astype(str)
+        hive_df["EXTNL_ACCT_ID"] = hive_df["EXTNL_ACCT_ID"].astype(str)
+
+        # Find common columns for comparison
+        common_columns = list(set(pcds_df.columns).intersection(hive_df.columns))
+        common_columns = [col for col in common_columns if col != "EXTNL_ACCT_ID"]
+
+        # Dynamically rename columns with _src and _tgt suffixes
+        pcds_renamed = {col: f"{col}_src" for col in common_columns}
+        hive_renamed = {col: f"{col}_tgt" for col in common_columns}
+
+        # Merge and compare data
+        merged_df = pd.merge(
+            pcds_df.rename(columns=pcds_renamed),
+            hive_df.rename(columns=hive_renamed),
+            left_on="EXTNL_ACCT_ID", right_on="EXTNL_ACCT_ID",
+            how="outer"
+        )
+
+        # Add a status column
+        def determine_status(row):
+            for column in common_columns:
+                src_col = f"{column}_src"
+                tgt_col = f"{column}_tgt"
+                if row.get(src_col) != row.get(tgt_col):
+                    return "FAILED"
+            return "PASS"
+
+        merged_df["status"] = merged_df.apply(determine_status, axis=1)
+
+        # Save the final report
+        final_report_columns = ["EXTNL_ACCT_ID", "status"]
+        for col in common_columns:
+            final_report_columns.append(f"{col}_src")
+            final_report_columns.append(f"{col}_tgt")
+
+        final_report_df = merged_df[final_report_columns].fillna("")
+
+        # Create an Excel file with formatting
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "PPNR Accuracy Report"
+
+        # Write DataFrame rows to the worksheet
+        for row in dataframe_to_rows(final_report_df, index=False, header=True):
+            ws.append(row)
+
+        # Apply conditional formatting for the status column
+        status_col_idx = final_report_df.columns.get_loc("status") + 1
+        red_fill = PatternFill(start_color="FFCCCC", end_color="FFCCCC", fill_type="solid")
+        green_fill = PatternFill(start_color="CCFFCC", end_color="CCFFCC", fill_type="solid")
+
+        for row_idx, cell in enumerate(ws.iter_cols(min_col=status_col_idx, max_col=status_col_idx, min_row=2, max_row=ws.max_row), start=2):
+            for c in cell:
+                if c.value == "FAILED":
+                    c.fill = red_fill
+                elif c.value == "PASS":
+                    c.fill = green_fill
+
+        # Save the Excel file
+        excel_report_path = report_path.replace(".csv", ".xlsx")
+        wb.save(excel_report_path)
+        print(f"Final PPNR Accuracy Report saved to {excel_report_path}")
+
+    except Exception as e:
+        print(f"Error generating accuracy report: {e}")
+        raise
+
+# Main Execution
+base_path = os.getenv("FILE_PATH", "/default/path")
+
+try:
+    # Fetch PCDS Data
+    fetch_pcds_data(f"{base_path}/pcds_data.csv")
+
+    # Fetch Hive Data
+    fetch_hive_data(f"{base_path}/hive_data.csv")
+
+    # Clean Hive Data
+    clean_hive_data(f"{base_path}/hive_data.csv")
+
+    # Compare Data and Generate Report
+    compare_and_generate_report(
+        f"{base_path}/pcds_data.csv",
+        f"{base_path}/hive_data.csv",
+        f"{base_path}/ppnr_accuracy_report.csv"
+    )
+
+except Exception as e:
+    print(f"Error during execution: {e}")
