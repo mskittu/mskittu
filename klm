@@ -1,18 +1,16 @@
 from datetime import datetime, timedelta
 
-# Function to calculate the first date of the previous month
-def get_first_date_previous_month():
+# Function to calculate the last date of the previous month
+def get_last_date_previous_month():
     # Get the current date
     today = datetime.now()
     # Get the first day of the current month
     first_day_current_month = today.replace(day=1)
     # Subtract one day to get the last day of the previous month
     last_day_previous_month = first_day_current_month - timedelta(days=1)
-    # Get the first day of the previous month
-    first_day_previous_month = last_day_previous_month.replace(day=1)
     # Format the date as 'YYYYMMDD'
-    return first_day_previous_month.strftime('%Y%m%d')
+    return last_day_previous_month.strftime('%Y%m%d')
 
 # Main execution to print the result
 if __name__ == "__main__":
-    print("First date of the previous month:", get_first_date_previous_month())
+    print("Last date of the previous month:", get_last_date_previous_month())
