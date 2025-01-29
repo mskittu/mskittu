@@ -1,1 +1,27 @@
-ssskk
+if __name__ == "__main__":
+    # Define base path
+    base_path = os.getenv("FILE_PATH", "/default/path")
+
+    # Generate dynamic partition date (Last date of previous month)
+    partition_date_start = get_first_date_previous_month()
+    partition_date_end = get_last_date_previous_month()
+    print(f"Using partition range: {partition_date_start} to {partition_date_end}")
+
+    try:
+        # Fetch PCDS Data
+        fetch_pcds_data(f"{base_path}/pcds_data.csv")
+
+        # Fetch Hive Data
+        fetch_hive_data(f"{base_path}/hive_data.csv")
+
+        # Clean Hive Data
+        clean_hive_data(f"{base_path}/hive_data.csv")
+
+        # Compare Data and Generate Report
+        compare_and_generate_report(
+            f"{base_path}/pcds_data.csv",
+            f"{base_path}/hive_data.csv",
+            f"{base_path}/ppnr_accuracy_report.csv"
+        )
+    except Exception as e:
+        print(f"Error during execution: {e}")
