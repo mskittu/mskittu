@@ -1,1 +1,49 @@
-ssskk
+#!/bin/bash
+
+# Get the current month and year
+YEAR=$(date +"%Y")
+MONTH=$(date +"%m")
+
+# Initialize business day counter
+BUSINESS_DAYS=0
+
+# Start from the 1st of the month
+for DAY in {1..31}; do
+    # Check if the day is valid
+    if ! date -d "$YEAR-$MONTH-$DAY" >/dev/null 2>&1; then
+        break
+    fi
+
+    # Get the day of the week (1=Monday, 7=Sunday)
+    DAY_OF_WEEK=$(date -d "$YEAR-$MONTH-$DAY" +%u)
+
+    # Check if it's a weekday (Monday-Friday)
+    if [[ $DAY_OF_WEEK -lt 6 ]]; then
+        ((BUSINESS_DAYS++))
+    fi
+
+    # Capture 5th, 6th, and 7th business days
+    if [[ $BUSINESS_DAYS -eq 5 ]]; then
+        BD5=$DAY
+    elif [[ $BUSINESS_DAYS -eq 6 ]]; then
+        BD6=$DAY
+    elif [[ $BUSINESS_DAYS -eq 7 ]]; then
+        BD7=$DAY
+        break
+    fi
+done
+
+echo "5th Business Day: $BD5"
+echo "6th Business Day: $BD6"
+echo "7th Business Day: $BD7"
+
+# Run P2P script on these days
+TODAY=$(date +"%d")
+
+if [[ $TODAY -eq $BD5 || $TODAY -eq $BD6 || $TODAY -eq $BD7 ]]; then
+    echo "Running P2P shell script..."
+    # Replace with actual script execution
+    /path/to/p2p_script.sh
+else
+    echo "Today is not a scheduled business day for P2P script execution."
+fi
