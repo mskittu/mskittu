@@ -1,1 +1,77 @@
-ssskk
+#!/bin/bash
+
+# Athena configuration
+DATABASE="your_database"
+OUTPUT_S3_BUCKET="s3://your-bucket/athena-results"
+FINAL_OUTPUT_FILE="final_results.csv"
+
+# Define streams, modules, and their queries
+declare -A STREAM_MODULES
+STREAM_MODULES["challanger"]="ifrs_pre_default stage airb ipe_default default_book mrd_fact"
+STREAM_MODULES["cecl"]="module_x"
+
+# Define module queries
+declare -A MODULE_QUERIES
+MODULE_QUERIES["ifrs_pre_default"]="SELECT * FROM ifrs_pre_default LIMIT 10;"
+MODULE_QUERIES["stage"]="SELECT * FROM stage WHERE column1 = 'value';"
+MODULE_QUERIES["airb"]="SELECT COUNT(*) FROM airb;"
+MODULE_QUERIES["ipe_default"]="SELECT * FROM ipe_default WHERE condition = true;"
+MODULE_QUERIES["default_book"]="SELECT DISTINCT column1 FROM default_book;"
+MODULE_QUERIES["mrd_fact"]="SELECT * FROM mrd_fact LIMIT 20;"
+MODULE_QUERIES["module_x"]="SELECT * FROM module_x WHERE filter_column = 'value';"
+
+# Temporary file to store query results before appending to final output
+TEMP_FILE="temp_results.csv"
+
+# Initialize the final CSV file
+echo "Project Name,Stream Name,Module Name,Query,Result" > $FINAL_OUTPUT_FILE
+
+# Iterate over streams
+for STREAM in "${!STREAM_MODULES[@]}"; do
+    echo "Processing stream: $STREAM"
+    
+    # Iterate over modules in the stream
+    for MODULE in ${STREAM_MODULES[$STREAM]}; do
+        echo "Processing module: $MODULE"
+        
+        # Get the query for the module
+        QUERY=${MODULE_QUERIES[$MODULE]}
+        
+        # Run the query in Athena
+        QUERY_ID=$(aws athena start-query-execution \
+            --query-string "$QUERY" \
+            --query-execution-context Database=$DATABASE \
+            --result-configuration OutputLocation=$OUTPUT_S3_BUCKET \
+            --output text)
+        
+        echo "Query ID: $QUERY_ID"
+
+        # Wait for the query to complete
+        while true; do
+            STATUS=$(aws athena get-query-execution --query-execution-id $QUERY_ID --query 'QueryExecution.Status.State' --output text)
+            if [[ "$STATUS" == "SUCCEEDED" ]]; then
+                break
+            elif [[ "$STATUS" == "FAILED" || "$STATUS" == "CANCELLED" ]]; then
+                echo "Query failed or cancelled for module $MODULE in stream $STREAM."
+                continue
+            fi
+            sleep 5
+        done
+
+        # Download the query result
+        RESULT_FILE="$OUTPUT_S3_BUCKET/$QUERY_ID.csv"
+        aws s3 cp $RESULT_FILE $TEMP_FILE
+
+        # Append the result to the final output file
+        if [[ -f $TEMP_FILE ]]; then
+            awk -v project="Project_Name" -v stream="$STREAM" -v module="$MODULE" -v query="$QUERY" 'NR > 1 {print project, stream, module, query, $0}' OFS="," $TEMP_FILE >> $FINAL_OUTPUT_FILE
+            echo "Results appended for module: $MODULE"
+        else
+            echo "No results for module: $MODULE"
+        fi
+    done
+done
+
+# Upload the final output file to S3
+aws s3 cp $FINAL_OUTPUT_FILE $OUTPUT_S3_BUCKET/$FINAL_OUTPUT_FILE
+echo "Final results saved to $OUTPUT_S3_BUCKET/$FINAL_OUTPUT_FILE"
