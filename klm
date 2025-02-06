@@ -1,1 +1,71 @@
-ssskk
+#!/bin/bash
+
+# Configuration
+DATABASE="your_database"                        # Replace with your Athena database name
+OUTPUT_S3_BUCKET="s3://your-bucket/athena-results"  # Replace with your S3 bucket path
+QUERY="SELECT * FROM your_table LIMIT 10;"       # Replace with your query
+TEMP_RESULT_FILE="temp_query_result.csv"         # Temporary local file to store query results
+FINAL_OUTPUT_FILE="final_query_results.csv"      # Final output file with query metadata
+
+# Step 1: Start Query Execution
+echo "Starting Athena query execution..."
+QUERY_ID=$(aws athena start-query-execution \
+    --query-string "$QUERY" \
+    --query-execution-context Database=$DATABASE \
+    --result-configuration OutputLocation=$OUTPUT_S3_BUCKET \
+    --output text)
+
+if [[ -z "$QUERY_ID" ]]; then
+    echo "Failed to start query execution."
+    exit 1
+fi
+
+echo "Query execution started. Query ID: $QUERY_ID"
+
+# Step 2: Wait for Query to Complete
+echo "Waiting for query execution to complete..."
+while true; do
+    STATUS=$(aws athena get-query-execution --query-execution-id $QUERY_ID --query 'QueryExecution.Status.State' --output text)
+    echo "Current status: $STATUS"
+
+    if [[ "$STATUS" == "SUCCEEDED" ]]; then
+        echo "Query execution completed successfully."
+        break
+    elif [[ "$STATUS" == "FAILED" || "$STATUS" == "CANCELLED" ]]; then
+        echo "Query execution failed or was cancelled."
+        exit 1
+    fi
+    sleep 5
+done
+
+# Step 3: Download Query Results from S3
+echo "Downloading query results from S3..."
+RESULT_FILE="$OUTPUT_S3_BUCKET/$QUERY_ID.csv"
+aws s3 cp $RESULT_FILE $TEMP_RESULT_FILE
+
+if [[ ! -f $TEMP_RESULT_FILE ]]; then
+    echo "Failed to download query results."
+    exit 1
+fi
+
+echo "Query results downloaded to $TEMP_RESULT_FILE"
+
+# Step 4: Add Metadata and Save Final Results
+echo "Processing query results and adding metadata..."
+echo "Query,Result" > $FINAL_OUTPUT_FILE
+awk -v query="$QUERY" 'NR > 1 {print query "," $0}' $TEMP_RESULT_FILE >> $FINAL_OUTPUT_FILE
+
+echo "Final query results saved to $FINAL_OUTPUT_FILE"
+
+# Step 5: Upload Final Results to S3
+echo "Uploading final results to S3..."
+aws s3 cp $FINAL_OUTPUT_FILE $OUTPUT_S3_BUCKET/$FINAL_OUTPUT_FILE
+
+if [[ $? -eq 0 ]]; then
+    echo "Final results uploaded successfully to $OUTPUT_S3_BUCKET/$FINAL_OUTPUT_FILE"
+else
+    echo "Failed to upload final results."
+    exit 1
+fi
+
+echo "Script execution completed."
