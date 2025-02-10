@@ -1,1 +1,22 @@
-ssskk
+#!/bin/bash
+
+# Fetch last dates of the previous three months dynamically
+last_date_3_months_ago=$(date -d "$(date +%Y-%m-01) -3 days" +"%Y-%m-%d")
+last_date_2_months_ago=$(date -d "$(date +%Y-%m-01) -2 days" +"%Y-%m-%d")
+last_date_1_month_ago=$(date -d "$(date +%Y-%m-01) -1 day" +"%Y-%m-%d")
+
+# Print the last dates of the previous three months
+echo "Last date of 3 months ago: $last_date_3_months_ago"
+echo "Last date of 2 months ago: $last_date_2_months_ago"
+echo "Last date of 1 month ago: $last_date_1_month_ago"
+
+# Example usage in SQL Query
+sql_query="SELECT * FROM your_table WHERE your_date_column IN ('$last_date_3_months_ago', '$last_date_2_months_ago', '$last_date_1_month_ago');"
+
+echo "Executing SQL Query: $sql_query"
+
+# Uncomment and modify this line to execute the query (Example for MySQL)
+# mysql -u your_user -p your_database -e "$sql_query"
+
+# Uncomment and modify this line for PostgreSQL
+# PGPASSWORD="your_password" psql -U your_user -d your_database -c "$sql_query"
