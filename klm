@@ -1,1 +1,22 @@
-ssskk
+#!/bin/bash
+
+# Fetch last 3 months' third date dynamically
+date1=$(date -d "-3 months" +"%Y-%m-03")
+date2=$(date -d "-2 months" +"%Y-%m-03")
+date3=$(date -d "-1 months" +"%Y-%m-03")
+
+# Print the dates
+echo "Third date from 3 months ago: $date1"
+echo "Third date from 2 months ago: $date2"
+echo "Third date from 1 month ago: $date3"
+
+# Example: Pass these dates to an SQL query
+sql_query="SELECT * FROM your_table WHERE your_date_column IN ('$date1', '$date2', '$date3');"
+
+echo "Executing SQL Query: $sql_query"
+
+# If using MySQL, you can pass it like this:
+# mysql -u your_user -p your_database -e "$sql_query"
+
+# If using PostgreSQL, you can pass it like this:
+# PGPASSWORD="your_password" psql -U your_user -d your_database -c "$sql_query"
