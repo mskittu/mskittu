@@ -1,1 +1,13 @@
-ssskk
+#!/bin/bash
+
+# List of buckets to check
+buckets=("bucket-name-1" "bucket-name-2" "bucket-name-3")
+
+# Loop through each bucket
+for bucket in "${buckets[@]}"; do
+    if aws s3 ls "s3://$bucket" &> /dev/null; then
+        echo "Bucket '$bucket' exists."
+    else
+        echo "Bucket '$bucket' does NOT exist."
+    fi
+done
