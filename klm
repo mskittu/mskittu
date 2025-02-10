@@ -1,1 +1,11 @@
-ssskk
+#!/bin/bash
+
+# Get the last day of the last 3 months dynamically
+last_date_3_months_ago=$(date -d "$(date +%Y-%m-01 last month -2 months) -1 day" +"%Y-%m-%d")
+last_date_2_months_ago=$(date -d "$(date +%Y-%m-01 last month -1 months) -1 day" +"%Y-%m-%d")
+last_date_1_month_ago=$(date -d "$(date +%Y-%m-01 last month) -1 day" +"%Y-%m-%d")
+
+# Print last dates
+echo "Last date of 3 months ago: $last_date_3_months_ago"
+echo "Last date of 2 months ago: $last_date_2_months_ago"
+echo "Last date of 1 month ago: $last_date_1_month_ago"
