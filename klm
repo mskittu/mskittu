@@ -1,1 +1,20 @@
-ssskk
+# List of buckets to check
+buckets=("cecl_ead_mrd_cons_fact" "ifrs_pre_default_mrd_fact" "stage_ifrs_default_book" "ddd")
+
+# Base S3 bucket prefix
+base_s3_path="s3://uat1-prp-rftu-25-045552507264-us-east-1-cuic"
+
+# Loop through each bucket
+for bucket in "${buckets[@]}"; do
+    # Construct full bucket path
+    full_bucket_path="$base_s3_path/$bucket"
+    
+    # Count files in the bucket
+    file_count=$(aws s3 ls "$full_bucket_path" --recursive | wc -l)
+    
+    if [[ $file_count -gt 0 ]]; then
+        echo "Bucket '$bucket' exists and contains $file_count files."
+    else
+        echo "Bucket '$bucket' either does not exist or is empty."
+    fi
+done
