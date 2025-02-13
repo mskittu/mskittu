@@ -1,1 +1,18 @@
-ssskk
+#!/bin/bash
+
+# Define input CSV files
+CSV1="uscc_challenger_ipe_output.csv"
+CSV2="IFRS_PRE_DEFAULT_MRD_FACT.csv"
+
+# Define output merged CSV file
+OUTPUT_CSV="combined_output.csv"
+
+# Create the output file and add headers for identification
+echo "Sheet: uscc_challenger_ipe_output" > "$OUTPUT_CSV"
+cat "$CSV1" >> "$OUTPUT_CSV"
+echo "" >> "$OUTPUT_CSV"  # Add a blank line between sheets
+
+echo "Sheet: IFRS_PRE_DEFAULT_MRD_FACT" >> "$OUTPUT_CSV"
+cat "$CSV2" >> "$OUTPUT_CSV"
+
+echo "Merged CSV file created: $OUTPUT_CSV"
