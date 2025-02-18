@@ -1,1 +1,33 @@
-ssskk
+import pandas as pd
+import os
+
+# Define CSV file names
+csv_files = {
+    "MDS_PPNR_CCAR_CC": "mds_ppnr_ccar_cc.csv",
+    "MDS_PPNR_CCAR_BC": "mds_ppnr_ccar_bc.csv"
+}
+
+# Define the output Excel file name
+output_excel = "mds_ppnr_ccar_cc_bc.xlsx"
+
+# Create an Excel writer object
+with pd.ExcelWriter(output_excel, engine="xlsxwriter") as writer:
+    for sheet_name, csv_file in csv_files.items():
+        if os.path.exists(csv_file):
+            print(f"Processing file: {csv_file}")
+
+            # Read CSV into DataFrame
+            df = pd.read_csv(csv_file)
+
+            # Convert data types to string and replace patterns
+            df = df.astype(str).replace(to_replace=r"^999999.*", value="Null", regex=True)
+
+            # Write DataFrame to Excel sheet
+            df.to_excel(writer, sheet_name=sheet_name, index=False)
+
+            # Delete the CSV file after writing
+            os.remove(csv_file)
+            print(f"Deleted: {csv_file}")
+
+# Save and close the Excel writer
+print(f"Merged Excel file created: {output_excel}")
