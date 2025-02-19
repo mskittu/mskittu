@@ -1,1 +1,12 @@
-ssskk
+SELECT 
+    EXTL_ACCT_ID, 
+    SUM(chrgoff_amt) AS purch_fraud_co_amt
+FROM (
+    SELECT 
+        EXTL_ACCT_ID,
+        CAST(chrgoff_amt AS DECIMAL(16,3)) AS chrgoff_amt,
+        DENSE_RANK() OVER (PARTITION BY extnl_acct_id ORDER BY EFF_DT) AS RN_FRAUD
+    FROM FM_ACCI_DBA.FMT_ACCT_C
+) A
+WHERE RN_FRAUD = 1
+GROUP BY EXTL_ACCT_ID;
