@@ -1,1 +1,41 @@
-ssskk
+SELECT 
+    EXTL_ACCT_ID, 
+    SUM(chrgoff_amt) AS purch_fraud_co_amt
+FROM 
+    (
+        SELECT 
+            EXTL_ACCT_ID, 
+            CAST(chrgoff_amt AS DECIMAL(16,3)) AS chrgoff_amt,
+            DENSE_RANK() OVER (PARTITION BY extnl_acct_id ORDER BY EFF_DT) AS RN_FRAUD
+        FROM 
+            ${FNT_INGEST_DB}.${FNT_ACCT_C}
+        WHERE 
+            EXTN_ACCT_ID IS NOT NULL 
+            AND ACCT_STATUS_RSN_TXT LIKE '%CORF%' 
+            OR ACCT_STATUS_RSN_TXT LIKE '%CORT%'
+            AND CHRGOFF_DT IS NOT NULL 
+            AND DATE(CHRGOFF_DT) BETWEEN '${FIRST_DATE_PREV_MONTH_HYPHEN}' 
+                                      AND '${LAST_DATE_PREV_MONTH_HYPHEN}'
+    ) A 
+WHERE 
+    RN_FRAUD = 1
+GROUP BY 
+    EXTL_ACCT_ID;
+
+WITH FMT_ACCT_C_1 AS (
+    SELECT 
+        P2.PURCH_FRAUD_CO_AMT AS PURCH_FRAUD_CO_AMT,
+        P2.EXTNL_ACCT_ID,
+        P2.CHRGOFF_AMT AS CHRGOFF_AMT_FMT,
+        P2.CR_LMT_AMT AS CR_LMT_AMT_FMT,
+        ROW_NUMBER() OVER (PARTITION BY P2.EXTNL_ACCT_ID ORDER BY P2.CHRGOFF_AMT) AS RANKS
+    FROM 
+        FMT_ACCT_DBA.FMT_ACCT_C P2
+    INNER JOIN 
+        EXTRACTED_IDS E1 ON E1.EXTNL_ACCT_ID = P2.EXTNL_ACCT_ID
+    WHERE 
+        P2.EFF_DT BETWEEN DATE('20241101','YYYYMMDD') 
+                      AND DATE('20241130','YYYYMMDD')
+        AND P2.SFX_NBR = '0'
+)
+SELECT * FROM FMT_ACCT_C_1;
