@@ -1,1 +1,46 @@
-ssskk
+import subprocess
+import pandas as pd
+
+def fetch_hive_intermediate_data():
+    try:
+        # Hive intermediate query
+        output_path = "/apps/tenant_local/usrf/stage/barclays/finance/accuracy_report/MDS_CCAR/hive_int.csv"
+        
+        hive_query = """
+        -- Your Hive SQL query here
+        """
+
+        # Execute Hive query and capture output
+        hive_command = f"hive -e \"{hive_query}\""
+        result = subprocess.run(
+            hive_command, shell=True, check=True,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True
+        )
+
+        # Process Hive query output
+        lines = result.stdout.strip().split('\n')
+        if not lines or len(lines) < 2:  # Ensure there's data excluding headers
+            raise ValueError("Hive query returned no data.")
+
+        # Extract header and data
+        columns = lines[0].split('\t')  # First row is assumed to be the header
+        data = [line.split('\t') for line in lines[1:]]  # Remaining rows are data
+
+        # Create DataFrame
+        hive_df = pd.DataFrame(data, columns=columns)
+
+        # Clean invalid elements
+        hive_df = hive_df.dropna()  # Removing any invalid/missing values
+
+        # Save to CSV
+        hive_df.to_csv(output_path, index=False)
+        print(f"✅ Hive Intermediate data saved to {output_path}")
+
+        return hive_df
+
+    except subprocess.CalledProcessError as e:
+        print(f"❌ Error executing Hive query: {e.stderr}")
+        raise
+    except Exception as e:
+        print(f"❌ General error fetching Hive data: {e}")
+        raise
