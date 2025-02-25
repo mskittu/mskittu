@@ -1,12 +1,1 @@
-# Function to convert any column name to CamelCase and capitalize the first letter
-def to_camel_case(name):
-    if 'software_id' in name or 'device_id' in name:
-        components = name.split('_')
-        return ''.join(x.title() for x in components)
-    
-    if 'new_software_id' in name or 'new_device_id' in name:
-        components = name.split('_')
-        return ''.join(x.title() for x in components)
-    
-    else:
-        return name.capitalize()
+ssskk
