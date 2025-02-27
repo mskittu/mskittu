@@ -1,1 +1,55 @@
-ssskk
+import sys
+import boto3
+import pandas as pd
+
+# Function to get user input for stream name and table paths
+def get_user_inputs():
+    stream_name = input("Enter the stream name: ")
+    table_paths = input("Enter S3 file paths (comma-separated): ").split(",")
+    table_paths = [path.strip() for path in table_paths]  # Clean whitespace
+    return stream_name, table_paths
+
+# Initialize S3 client
+s3_client = boto3.client('s3')
+
+# Get user inputs
+stream_name, table_paths = get_user_inputs()
+
+# Create an Excel file in memory
+excel_writer = pd.ExcelWriter(f'/tmp/{stream_name}_final.xlsx', engine='xlsxwriter')
+
+# Process each CSV file
+for table_path in table_paths:
+    parts = table_path.replace("s3://", "").split("/")
+    
+    if len(parts) < 2:
+        print(f"Skipping invalid S3 path: {table_path}")
+        continue
+
+    bucket_name = parts[0]
+    key = '/'.join(parts[1:])
+
+    print(f"Processing file: s3://{bucket_name}/{key}")
+
+    # Download CSV data from S3
+    try:
+        obj = s3_client.get_object(Bucket=bucket_name, Key=key)
+        df = pd.read_csv(obj['Body'])
+
+        # Extract table name from CSV file path
+        table_name = key.split("/")[-1].replace('.csv', '')
+
+        # Write data to Excel sheet
+        df.to_excel(excel_writer, sheet_name=table_name, index=False)
+    
+    except Exception as e:
+        print(f"Error processing {table_path}: {e}")
+
+# Save the XLSX file
+excel_writer.close()
+
+# Upload XLSX file back to S3
+final_xlsx_path = f'processed_files/{stream_name}_final.xlsx'  # Generic S3 path
+s3_client.upload_file(f'/tmp/{stream_name}_final.xlsx', bucket_name, final_xlsx_path)
+
+print(f"Excel file uploaded to s3://{bucket_name}/{final_xlsx_path}")
