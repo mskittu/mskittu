@@ -1,1 +1,15 @@
-ssskk
+CREATE VIEW IF NOT EXISTS finops_uom.spend_manufacturer_context AS 
+SELECT 
+    cast(null as string) as id, 
+    cast(null as string) as owner_id, 
+    cast(null as string) as manufacturer_name 
+COMMENT 'The "spend_manufacturer_context" table contains custom information about the manufacturer.';
+
+
+CREATE VIEW IF NOT EXISTS finops_bi.spend_category_context AS 
+SELECT 
+    cast(null as string) as id COMMENT 'Internal identifier for the spend category context.', 
+    cast(null as string) as owner_id COMMENT 'Internal identifier for the spend category.', 
+    cast(null as string) as owner_type, 
+    cast(null as string) as key COMMENT 'SpendCategory will be renamed as Spend Category.'
+COMMENT 'The "spend_category_context" table contains custom information about the spend category.';
