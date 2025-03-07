@@ -1,15 +1,1 @@
-CREATE VIEW IF NOT EXISTS finops_bi.spend_category_context AS 
-SELECT 
-    cast(null as string) as id COMMENT 'Internal identifier for the spend category context.', 
-    cast(null as string) as owner_id COMMENT 'Internal identifier for the spend category.', 
-    cast(null as string) as owner_type COMMENT 'Type of owner for the spend category.', 
-    cast(null as string) as spend_category COMMENT 'SpendCategory will be renamed as Spend Category and will act as a join key with software_tech_spend.'
-COMMENT 'The "spend_category_context" table contains custom information about the spend category.';
-
-CREATE VIEW IF NOT EXISTS finops_bi.spend_manufacturer_context AS 
-SELECT 
-    cast(null as string) as id COMMENT 'Internal identifier for the manufacturer context.', 
-    cast(null as string) as owner_id COMMENT 'Internal identifier for the manufacturer.', 
-    cast(null as string) as owner_type COMMENT 'Type of owner for the manufacturer.', 
-    cast(null as string) as manufacturer_name COMMENT 'VendorName will be renamed as Manufacturer Name and will act as a join key with software_tech_spend.'
-COMMENT 'The "spend_manufacturer_context" table contains custom information about the manufacturer.';
+ssskk
