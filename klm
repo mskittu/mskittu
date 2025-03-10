@@ -1,1 +1,79 @@
-ssskk
+import os
+import pandas as pd
+import subprocess
+
+def fetch_hive_intermediate_data():
+    try:
+        output_path = "/apps/tenant_local/usrf_stg/HadoopSandbox/x01532741/stage/barclays/finance/SOX_FILES/hive_data.csv"
+
+        # Define multiple queries
+        queries = [
+            {"table_name": "appl_anlys_mix_full_base", "query": """
+                SELECT SUM(p4.external_acct_id) AS external_acct_id, 
+                       SUM(p4.partition_date) AS partition_date,
+                       SUM(p4.rtl_trd_tot_cnt) AS cbv96_colinq 
+                FROM usrf_ingest.appl_anlys_mix_full_base p4 
+                WHERE p4.external_acct_id IS NOT NULL 
+                AND p4.partition_date = '20250131'"""},
+            {"table_name": "cds_dma_cr_burau_tru_c", "query": """
+                SELECT SUM(p5.niqry_tot_cnt) AS totinquiriescount, 
+                       SUM(p5.bank_revl_vrfd_trd_lst_6mo_cnt) AS totnumopenbankrevtradevrif6mo 
+                FROM usrf_ingest.cds_dma_cr_burau_tru_c p5 
+                WHERE p5.partition_date = '20250131'"""}
+        ]
+
+        final_results = []
+
+        for query_info in queries:
+            table_name = query_info["table_name"]
+            hive_query = query_info["query"]
+
+            # Execute Hive query via subprocess
+            hive_command = f"hive -e \"{hive_query}\""
+            result = subprocess.run(
+                hive_command, shell=True, check=True,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True
+            )
+
+            # Process Hive query output
+            lines = result.stdout.strip().split('\n')
+            values = lines[-1].split('\t')  # Extract last row values
+            columns = [col.strip() for col in lines[0].split('\t')]  # Extract column names
+
+            # Format results for CSV Output
+            table_results = {
+                "interm_table_name": [table_name] * len(columns),
+                "interm_column_name": columns,
+                "results": values
+            }
+            final_results.append(pd.DataFrame(table_results))
+
+        # Combine results from all queries
+        final_df = pd.concat(final_results, ignore_index=True)
+
+        # Save fetched data to CSV
+        final_df.to_csv(output_path, index=False)
+        print(f"Hive Intermediate data saved to {output_path}")
+
+        # Clean Hive data before further processing
+        clean_hive_data(output_path)
+
+        return final_df
+
+    except Exception as e:
+        print(f"Error fetching Hive data: {e}")
+        raise
+
+def clean_hive_data(hive_data_path):
+    try:
+        hive_data = pd.read_csv(hive_data_path, error_bad_lines=False, warn_bad_lines=True)
+        hive_data = hive_data[~hive_data.astype(str).apply(lambda x: x.str.contains("onMismatch", na=False)).any(axis=1)]
+        hive_data.to_csv(hive_data_path, index=False)
+        print(f"Cleaned Hive data saved to {hive_data_path}")
+    except Exception as e:
+        print(f"Error while cleaning Hive data: {e}")
+        raise
+
+# Example usage
+if __name__ == "__main__":
+    fetch_hive_intermediate_data()
