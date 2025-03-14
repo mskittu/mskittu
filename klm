@@ -1,1 +1,38 @@
-ssskk
+import pandas as pd
+
+# Load the Excel file
+file_path = r"C:\Users\DELL\Documents\challenger.xlsx"  # Replace with your actual file path
+xls = pd.ExcelFile(file_path)
+
+# Dictionary to store updated sheets
+updated_sheets = {}
+
+# Iterate over each sheet in the Excel file
+for sheet_name in xls.sheet_names:
+    df = pd.read_excel(xls, sheet_name=sheet_name)
+
+    # Detect numeric columns (excluding COB_DATE)
+    numeric_columns = [col for col in df.select_dtypes(include=['number']).columns if col != "COB_DATE"]
+
+    if numeric_columns:
+        df = df.sort_values(by="COB_DATE", ascending=False)  # Sort by COB_DATE in descending order
+
+        # Compute variance as the difference between consecutive rows
+        df_variance = df[numeric_columns].diff(periods=-1)  # First - Second, First - Third, etc.
+
+        # Rename variance columns to indicate difference
+        df_variance = df_variance.add_suffix("_VAR")
+
+        # Combine original data with variance results
+        df_combined = pd.concat([df, df_variance], axis=1)
+
+        # Store results in dictionary with original sheet names
+        updated_sheets[sheet_name] = df_combined
+
+# Save results to a new Excel file
+output_file = file_path.replace(".xlsx", "_with_variance.xlsx")
+with pd.ExcelWriter(output_file) as writer:
+    for sheet, df in updated_sheets.items():
+        df.to_excel(writer, sheet_name=sheet, index=False)
+
+print(f"Updated Excel file with variance saved at: {output_file}")
