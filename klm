@@ -1,1 +1,89 @@
-ssskk
+1. Check for Missing or Null Values in Key Columns
+
+It's important to ensure that there are no missing or NULL values in the columns that you're aggregating or filtering by. You can run a query like the following to check for such issues:
+
+SELECT COUNT(*)
+FROM usrf.ingest.CDS_ASP_EOM_ACCT
+WHERE EXTERNAL_ACCT_ID IS NULL
+AND partition_date = '20250228'
+AND ACCT_PLTFM_CD = 'C';
+
+This query will show you how many records have a NULL value in EXTERNAL_ACCT_ID for the specified partition date and platform code.
+
+2. Verify the Data for a Specific Account ID
+
+If you have a specific EXTERNAL_ACCT_ID that is causing a mismatch, you can isolate the data for that ID to see if it's correct or if there are discrepancies.
+
+SELECT *
+FROM usrf.ingest.CDS_ASP_EOM_ACCT
+WHERE EXTERNAL_ACCT_ID = 'your_account_id'
+AND partition_date = '20250228'
+AND ACCT_PLTFM_CD = 'C';
+
+This query will help you investigate specific account data and verify if the values are correct.
+
+3. Verify the Sum of Transaction Counts and Balances
+
+Check if the aggregated sums (like transaction counts and balances) are calculating correctly for a specific account ID or for a period:
+
+SELECT EXTERNAL_ACCT_ID, 
+       SUM(CAST(P4.COL_INQRY_TOT_CNT AS BIGINT)) AS Total_Inquiry_Count,
+       SUM(CAST(P4.TRD_OPEN_AVG_MNTH_CNT AS BIGINT)) AS Avg_Transaction_Count
+FROM usrf.ingest.CDS_ASP_EOM_ACCT
+WHERE partition_date = '20250228'
+AND ACCT_PLTFM_CD = 'C'
+GROUP BY EXTERNAL_ACCT_ID;
+
+This will help you check if the sum of values is correct for each account. If discrepancies arise, it may indicate issues with how data is being aggregated.
+
+4. Check for Duplicates or Inconsistent Data
+
+Sometimes data issues arise due to duplicate entries. You can check if there are any duplicates in the data using:
+
+SELECT EXTERNAL_ACCT_ID, partition_date, COUNT(*)
+FROM usrf.ingest.CDS_ASP_EOM_ACCT
+WHERE partition_date = '20250228'
+AND ACCT_PLTFM_CD = 'C'
+GROUP BY EXTERNAL_ACCT_ID, partition_date
+HAVING COUNT(*) > 1;
+
+This query will show you if any account has duplicate records for the same partition date.
+
+5. Check for Date Range Consistency
+
+If you're aggregating over a date range, ensure the date range is being handled consistently. For example, if you’re summing over monthly transaction counts, ensure the dates align correctly:
+
+SELECT DISTINCT partition_date
+FROM usrf.ingest.CDS_ASP_EOM_ACCT
+WHERE ACCT_PLTFM_CD = 'C'
+ORDER BY partition_date;
+
+This will show you all distinct partition dates for the account platform code 'C' and help you verify that the date range you're working with is correct.
+
+6. Join Tables to Check Consistency Across Different Sources
+
+If you are joining multiple tables, it’s essential to ensure that the joins are correct and that data matches across tables. Here's an example:
+
+SELECT A.EXTERNAL_ACCT_ID, A.partition_date, B.some_column, A.some_column
+FROM usrf.ingest.CDS_ASP_EOM_ACCT A
+JOIN usrf.ingest.APPL_ANALY_MIX_FULL_BASE B
+  ON A.EXTERNAL_ACCT_ID = B.EXTERNAL_ACCT_ID
+WHERE A.partition_date = '20250228'
+AND A.ACCT_PLTFM_CD = 'C';
+
+This will allow you to cross-check the data between tables based on the EXTERNAL_ACCT_ID and ensure that the data is consistent between the two sources.
+
+7. Investigate Data for Specific Account Activities
+
+If you need to check the transaction activity for an account and ensure the activity sums are correct, you can run a query like this:
+
+SELECT EXTERNAL_ACCT_ID, 
+       SUM(CAST(P4.TRD_HGSR_CNT AS BIGINT)) AS Total_Transaction_Count
+FROM usrf.ingest.CDS_ASP_EOM_ACCT
+WHERE partition_date = '20250228'
+AND ACCT_PLTFM_CD = 'C'
+GROUP BY EXTERNAL_ACCT_ID;
+
+This query will help you investigate the total number of transactions and verify if there is a mismatch with your data.
+
+By running these queries, you can identify and narrow down the possible reasons for data mismatches. If you get specific errors or discrepancies, feel free to share more details for further assistance!
