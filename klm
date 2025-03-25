@@ -1,1 +1,38 @@
-ssskk
+import pandas as pd
+
+# Load the Excel file
+file_path = r"C:\Users\DELL\Documents\challenger.xlsx"  # Path to your file
+xls = pd.ExcelFile(file_path)
+
+# Dictionary to store updated sheets
+updated_sheets = {}
+
+# Iterate over each sheet in the Excel file
+for sheet_name in xls.sheet_names:
+    df = pd.read_excel(xls, sheet_name=sheet_name)
+
+    # Detect numeric columns (excluding COB_DATE)
+    numeric_columns = [col for col in df.select_dtypes(include=['number']).columns if col != "COB_DATE"]
+
+    if numeric_columns:
+        df = df.sort_values(by="COB_DATE", ascending=False)  # Sort by COB_DATE in descending order
+
+        # Calculate percentage change between consecutive rows for each numeric column
+        for col in numeric_columns:
+            # Apply the formula (Previous Value - Current Value) / Current Value * 100
+            pct_change = (df[col].shift(1) - df[col]) / df[col] * 100
+
+            # Apply the threshold logic and create new columns
+            df[f'{col}_PCT_CHANGE'] = pct_change
+            df[f'{col}_PCT_CHANGE_MINUS_5'] = pct_change - 5
+            df[f'{col}_PCT_CHANGE_PLUS_5'] = pct_change + 5
+
+        updated_sheets[sheet_name] = df
+
+# Save to a new Excel file
+output_file = file_path.replace(".xlsx", "_with_pct_change_thresholds.xlsx")
+with pd.ExcelWriter(output_file, engine='xlsxwriter') as writer:
+    for sheet, df in updated_sheets.items():
+        df.to_excel(writer, sheet_name=sheet, index=False)
+
+print(f"Updated Excel file with percentage change thresholds saved at: {output_file}")
