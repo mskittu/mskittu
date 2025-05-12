@@ -1,22 +1,20 @@
-def generate_sql_block(table_name):
-    return f'''<comment>New table:  {table_name}</comment>
-<sqlFile dbms="mssql"
-         endDelimiter="GO"
-         path="./Tables/{table_name}.sql"
-         relativeToChangelogFile="true"
-         splitStatements="true"
-         stripComments="false"/>'''
+#!/bin/bash
 
-def generate_xml_from_file(input_path, output_path):
-    with open(input_path, 'r') as file:
-        table_names = [line.strip() for line in file if line.strip()]
+# Set the first date of the current month and current date variables
+export FIRST_DATE_CURR_MNTH=$(date -d "$(date +%Y%m01)" +%Y%m%d)
+export COB_DATE=$(date -d "$FIRST_DATE_CURR_MNTH -1 day" +%Y%m%d)
 
-    with open(output_path, 'w') as file:
-        for table in table_names:
-            file.write(generate_sql_block(table) + '\n\n')
+# Define paths for touch command based on environment variables
+JOB_PATH="$EDGENODE_ROOT_DIR/job_date/$JOB_GROUP/$JOB_NAME/date/$COB_DATE"
 
-# Replace with your actual file paths
-input_path = r"C:\Users\YourName\Documents\table_names.txt"
-output_path = r"C:\Users\YourName\Documents\output.xml"
+# Check if the date file already exists
+if [ ! -f "$JOB_PATH" ]; then
+    echo "Touching COB date file for $COB_DATE..."
+    touch "$JOB_PATH"
+    echo "Date file created: $JOB_PATH"
+else
+    echo "Date file already exists: $JOB_PATH"
+fi
 
-generate_xml_from_file(input_path, output_path)
+# Print final date confirmation for logging
+echo "COB date set to: $COB_DATE"
