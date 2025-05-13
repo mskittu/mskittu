@@ -1,1 +1,52 @@
-SSSK
+#!/bin/bash
+
+# Set the first date of the current month and current date variables
+export FIRST_DATE_CURR_MNTH=$(date -d "$(date +%Y%m01)" +%Y%m%d)
+export COB_DATE=$(date -d "$FIRST_DATE_CURR_MNTH -1 day" +%Y%m%d)
+
+# Define paths for touch command based on environment variables
+JOB_PATH="$EDGENODE_ROOT_DIR/job_date/$JOB_GROUP/$JOB_NAME/date"
+
+# Automate job status management
+JOB_STATUS_FILE="${INPUT_FILE_PATH}/model_datastore_workflow.dat"
+JOB_STATUS="Pending"
+
+# Generate dates automatically for the past two months as an example (customize as needed)
+START_DATE="$(date -d '2 months ago' +%Y%m01)"
+END_DATE="$COB_DATE"
+
+# Generate date range
+DATES_TO_RUN=()
+CURRENT_DATE="$START_DATE"
+while [ "$CURRENT_DATE" -le "$END_DATE" ]; do
+    DATES_TO_RUN+=("$CURRENT_DATE")
+    CURRENT_DATE=$(date -d "$CURRENT_DATE +1 month" +%Y%m%d)
+    # Handle end-of-month logic
+    if [[ "$CURRENT_DATE" == *01 ]]; then
+        CURRENT_DATE=$(date -d "$CURRENT_DATE -1 day" +%Y%m%d)
+    fi
+    # Include current COB date to ensure it's always checked
+    if [ "$CURRENT_DATE" -gt "$END_DATE" ]; then
+        DATES_TO_RUN+=("$END_DATE")
+    fi
+done
+
+# Process each date
+for DATE in "${DATES_TO_RUN[@]}"; do
+    DATE_FILE="$JOB_PATH/$DATE"
+    if [ ! -f "$DATE_FILE" ]; then
+        echo "Touching COB date file for $DATE..."
+        touch "$DATE_FILE"
+        echo "Date file created: $DATE_FILE"
+    else
+        echo "Date file already exists: $DATE_FILE"
+    fi
+    # Update job status for each date if not completed
+    if ! grep -q "${DATE},Completed" "$JOB_STATUS_FILE"; then
+        echo "Ingestion,${DATE},${JOB_STATUS},${3},${4}" >> "$JOB_STATUS_FILE"
+        echo "Job marked as pending: $DATE"
+    else
+        echo "Skipping completed job: $DATE"
+    fi
+    echo "COB date set to: $DATE"
+done
