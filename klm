@@ -1,1 +1,32 @@
-SSSK
+#!/bin/bash
+
+# Set the first date of the current month and current date variables
+export FIRST_DATE_CURR_MNTH=$(date -d "$(date +%Y%m01)" +%Y%m%d)
+export COB_DATE=$(date -d "$FIRST_DATE_CURR_MNTH -1 day" +%Y%m%d)
+
+# Define paths for touch command based on environment variables
+JOB_PATH="$EDGENODE_ROOT_DIR/job_date/$JOB_GROUP/$JOB_NAME/date/$COB_DATE"
+
+# Check if the date file already exists
+if [ ! -f "$JOB_PATH" ]; then
+    echo "Touching COB date file for $COB_DATE..."
+    touch "$JOB_PATH"
+    echo "Date file created: $JOB_PATH"
+else
+    echo "Date file already exists: $JOB_PATH"
+fi
+
+# Automate job status management
+JOB_STATUS_FILE="${INPUT_FILE_PATH}/model_datastore_workflow.dat"
+JOB_STATUS="Pending"
+
+# If BD2 has already completed, skip it and only scan pending jobs
+if grep -q "${1},Completed" "$JOB_STATUS_FILE"; then
+    echo "Skipping completed job: $1"
+else
+    echo "Ingestion,${1},${JOB_STATUS},${3},${4}" >> "$JOB_STATUS_FILE"
+    echo "Job marked as pending: $1"
+fi
+
+# Print final date confirmation for logging
+echo "COB date set to: $COB_DATE"
