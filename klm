@@ -1,1 +1,12 @@
-SSSK
+if [ $? -eq 0 ]; then
+    echo "dihop_config : ${dihop_config}"
+    
+    if [ ! -s "${dihop_config}" ]; then
+        echo "DIHOP config is empty"
+        exit 103
+    fi
+
+else
+    echo "DIHOP config doesn't exist"
+    exit 1
+fi
