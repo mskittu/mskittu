@@ -1,1 +1,106 @@
-sss
+import os
+import sys
+import json
+import concurrent.futures as futures
+from datetime import datetime, timezone
+import boto3
+from botocore.config import Config
+
+# -------- Params (from Glue job arguments) --------
+# --SOURCE_BUCKET, --SOURCE_PREFIX, --DEST_BUCKET, --DEST_PREFIX
+# --DEST_ROLE_ARN, --MAX_WORKERS (default 32), --MODIFIED_AFTER (ISO), --DRY_RUN (true/false)
+args = {k.replace('--', '').upper(): v for k, v in zip(sys.argv[1::2], sys.argv[2::2])}
+
+SOURCE_BUCKET  = args.get('SOURCE_BUCKET')
+SOURCE_PREFIX  = args.get('SOURCE_PREFIX', '')
+DEST_BUCKET    = args.get('DEST_BUCKET')
+DEST_PREFIX    = args.get('DEST_PREFIX', '')
+DEST_ROLE_ARN  = args.get('DEST_ROLE_ARN')
+MAX_WORKERS    = int(args.get('MAX_WORKERS', '32'))
+DRY_RUN        = args.get('DRY_RUN', 'false').lower() == 'true'
+
+modified_after = args.get('MODIFIED_AFTER')
+MODIFIED_AFTER = datetime.fromisoformat(modified_after).replace(tzinfo=timezone.utc) if modified_after else None
+
+if not (SOURCE_BUCKET and DEST_BUCKET and DEST_ROLE_ARN):
+    print("Missing required args: --SOURCE_BUCKET --DEST_BUCKET --DEST_ROLE_ARN")
+    sys.exit(2)
+
+cfg = Config(retries={'max_attempts': 10, 'mode': 'standard'})
+
+# Source client (Account A)
+s3_src = boto3.client('s3', config=cfg)
+
+# Assume dest role (Account B)
+sts = boto3.client('sts', config=cfg)
+creds = sts.assume_role(RoleArn=DEST_ROLE_ARN, RoleSessionName='glue-cross-acct-copy')['Credentials']
+s3_dst = boto3.client(
+    's3',
+    aws_access_key_id=creds['AccessKeyId'],
+    aws_secret_access_key=creds['SecretAccessKey'],
+    aws_session_token=creds['SessionToken'],
+    config=cfg
+)
+
+def list_source_objects(bucket, prefix):
+    paginator = s3_src.get_paginator('list_objects_v2')
+    for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+        for obj in page.get('Contents', []):
+            if obj['Key'].endswith('/'):  # skip "folders"
+                continue
+            if MODIFIED_AFTER and obj['LastModified'] <= MODIFIED_AFTER:
+                continue
+            yield obj
+
+def needs_copy(bucket, key, size):
+    # Lightweight check: if object exists with same size, skip
+    try:
+        head = s3_dst.head_object(Bucket=bucket, Key=key)
+        return head.get('ContentLength') != size
+    except s3_dst.exceptions.NoSuchKey:
+        return True
+    except Exception:
+        return True  # on any error, attempt copy
+
+def copy_one(src_bucket, src_key, dst_bucket, dst_key):
+    if DRY_RUN:
+        return (src_key, 'DRY_RUN')
+    try:
+        # Server-side copy (fast; data stays in S3)
+        s3_dst.copy(
+            CopySource={'Bucket': src_bucket, 'Key': src_key},
+            Bucket=dst_bucket,
+            Key=dst_key,
+            ExtraArgs={}  # add {"StorageClass": "INTELLIGENT_TIERING"} or {"ServerSideEncryption": "aws:kms", "SSEKMSKeyId": "..."} if needed
+        )
+        return (src_key, 'COPIED')
+    except Exception as e:
+        return (src_key, f'ERROR: {e}')
+
+def main():
+    to_do = []
+    for obj in list_source_objects(SOURCE_BUCKET, SOURCE_PREFIX):
+        rel = obj['Key'][len(SOURCE_PREFIX):] if obj['Key'].startswith(SOURCE_PREFIX) else obj['Key']
+        dst_key = f"{DEST_PREFIX}{rel}"
+        if needs_copy(DEST_BUCKET, dst_key, obj['Size']):
+            to_do.append((obj['Key'], dst_key, obj['Size']))
+
+    print(f"Total objects to consider: {len(to_do)}")
+    if not to_do:
+        return
+
+    results = []
+    with futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as ex:
+        futs = [ex.submit(copy_one, SOURCE_BUCKET, k, DEST_BUCKET, dk) for (k, dk, _) in to_do]
+        for f in futures.as_completed(futs):
+            results.append(f.result())
+
+    copied = sum(1 for _, status in results if status == 'COPIED' or status == 'DRY_RUN')
+    errors = [(k, s) for k, s in results if s.startswith('ERROR')]
+    print(f"Done. Copied/Planned: {copied}, Errors: {len(errors)}")
+    if errors:
+        for k, s in errors[:50]:
+            print(k, s)
+
+if __name__ == "__main__":
+    main()
