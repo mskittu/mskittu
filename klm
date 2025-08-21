@@ -1,1 +1,42 @@
-sss
+# simple_s3_copy_shortcut.py
+import boto3
+
+# ==== EDIT THESE PATHS ====
+SOURCE_BUCKET = "my-source-account-bucket"
+SOURCE_PREFIX = "data/raw/2025/08/"        # e.g. s3://my-source-account-bucket/data/raw/2025/08/
+
+DEST_BUCKET   = "my-destination-account-bucket"
+DEST_PREFIX   = "data/landing/2025/08/"   # e.g. s3://my-destination-account-bucket/data/landing/2025/08/
+
+DEST_ROLE_ARN = "arn:aws:iam::<DEST_ACCOUNT_ID>:role/GlueCrossAccountWriterRole"
+# ==========================
+
+# Source S3 client (runs in source account)
+s3_src = boto3.client("s3")
+
+# Assume destination role
+sts = boto3.client("sts")
+creds = sts.assume_role(RoleArn=DEST_ROLE_ARN, RoleSessionName="glue-copy")["Credentials"]
+
+s3_dst = boto3.client(
+    "s3",
+    aws_access_key_id=creds["AccessKeyId"],
+    aws_secret_access_key=creds["SecretAccessKey"],
+    aws_session_token=creds["SessionToken"],
+)
+
+# Copy objects
+paginator = s3_src.get_paginator("list_objects_v2")
+copied = 0
+for page in paginator.paginate(Bucket=SOURCE_BUCKET, Prefix=SOURCE_PREFIX):
+    for obj in page.get("Contents", []):
+        key = obj["Key"]
+        if key.endswith("/"):  # skip folder markers
+            continue
+        rel = key[len(SOURCE_PREFIX):] if key.startswith(SOURCE_PREFIX) else key
+        dst_key = DEST_PREFIX + rel
+        s3_dst.copy({"Bucket": SOURCE_BUCKET, "Key": key}, DEST_BUCKET, dst_key)
+        copied += 1
+        print(f"Copied: s3://{SOURCE_BUCKET}/{key} -> s3://{DEST_BUCKET}/{dst_key}")
+
+print(f"Total objects copied: {copied}")
