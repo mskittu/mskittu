@@ -3,10 +3,13 @@
   "Statement": [
     {
       "Effect": "Allow",
-      "Principal": {
-        "AWS": "arn:aws:iam::<SOURCE_ACCOUNT_ID>:role/svc-loans_cross_acct_role"
-      },
-      "Action": "sts:AssumeRole"
+      "Action": ["s3:PutObject", "s3:PutObjectTagging", "s3:AbortMultipartUpload"],
+      "Resource": "arn:aws:s3:::DEST-BUCKET/*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": ["s3:ListBucket"],
+      "Resource": "arn:aws:s3:::DEST-BUCKET"
     }
   ]
 }
