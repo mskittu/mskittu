@@ -1,1 +1,100 @@
-sss
+Databricks Onboarding Process Document
+
+Purpose
+
+This document provides a step-by-step guide and process flow for onboarding a tenant onto Databricks (with AWS & Snowflake integration as required).
+
+
+---
+
+✅ Pre-Requisites
+
+1. Tenant must have an AWS Account.
+
+
+2. If EDP (Enterprise Data Platform) features are required, the account must be onboarded into EDP.
+
+
+3. Business Units (BUs) must register with the Business Enablement Team.
+
+
+4. Before onboarding any S3 buckets to Databricks, each BU or CIO must obtain approval from their CSO and provide a CSOSEC/CON ticket (for both development and production).
+
+
+5. SSO Access:
+
+If using INTRANET Domain → user must be part of INTRANET AD group.
+
+If using CLIENT Domain → user must be part of CLIENT AD group.
+
+Without data owner approval, no access will be granted.
+
+
+
+
+
+---
+
+🔄 Onboarding Steps (High-Level)
+
+1. Onboarding AWS Buckets to Databricks Workspace
+
+Tenant provides AWS account details.
+
+Business Enablement Team validates.
+
+
+
+2. Provisioning EDP Products for Tenant AWS Accounts
+
+PRD & DEV accounts created for tenant.
+
+Registered with EDP Onboarding Team.
+
+
+
+3. Provisioning VPC Products for Databricks AWS Account
+
+VPC setup for both DEV & PROD.
+
+Additional admin steps executed for DEV environments.
+
+
+
+4. Workspace & Product Rollout
+
+CLOUDSRE team rolls out products.
+
+Task raised for RTB (Run The Business) team to configure endpoints.
+
+
+
+5. Final Access & Validations
+
+Change requests raised for:
+
+Adding AD service groups.
+
+Adding DBX workspaces.
+
+Adding schema & credentials to DBX.
+
+
+Once approved, Databricks access is completed.
+
+
+
+
+
+---
+
+📊 Process Flow (Simplified Diagram)
+
+flowchart TD
+    A[Tenant Request / File with EDP Team] --> B[Excel to be filled & submitted]
+    B --> C[CR Raised by EDP Onboarding Team]
+    C --> D[AD Groups created & linked to DBX Workspaces]
+    D --> E[Change Request - Add Service Groups to DBX]
+    E --> F[Change Request - Add Source to DBX]
+    F --> G[Schema & Credentials created in DBX]
+    G --> H[Databricks Onboarding Completed ✅]
