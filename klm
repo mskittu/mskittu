@@ -1,1 +1,28 @@
-sss
+import boto3
+
+# --- EDIT THESE ---
+SRC_BUCKET = "tco8-source-bucket"
+DST_BUCKET = "producer-destination-bucket"
+SRC_PREFIX = "path/in/source/"
+DST_PREFIX = "path/in/destination/"
+REGION = "ap-south-1"
+# ------------------
+
+s3 = boto3.client("s3", region_name=REGION)
+
+def main():
+    paginator = s3.get_paginator("list_objects_v2")
+    for page in paginator.paginate(Bucket=SRC_BUCKET, Prefix=SRC_PREFIX):
+        for obj in page.get("Contents", []):
+            key = obj["Key"]
+            dst_key = key.replace(SRC_PREFIX, DST_PREFIX, 1)
+            print(f"Copying {key} -> {dst_key}")
+            s3.copy_object(
+                CopySource={"Bucket": SRC_BUCKET, "Key": key},
+                Bucket=DST_BUCKET,
+                Key=dst_key,
+                ACL="bucket-owner-full-control"
+            )
+
+if __name__ == "__main__":
+    main()
