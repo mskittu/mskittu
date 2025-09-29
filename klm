@@ -1,1 +1,103 @@
-sss
+#!/usr/bin/env python3
+# fetch_uat_datasetdef.py
+
+import argparse, base64, datetime, json, pathlib, sys
+import requests
+from urllib3.util.retry import Retry
+from requests.adapters import HTTPAdapter
+
+def build_session():
+    s = requests.Session()
+    retries = Retry(
+        total=5,
+        backoff_factor=0.5,
+        status_forcelist=[429, 500, 502, 503, 504],
+        allowed_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"],
+        raise_on_status=False,
+    )
+    s.mount("https://", HTTPAdapter(max_retries=retries))
+    s.mount("http://", HTTPAdapter(max_retries=retries))
+    return s
+
+def make_auth_header(auth, user, password, bearer):
+    if auth == "basic":
+        if user is None or password is None:
+            sys.exit("ERROR: --user and --password are required for basic auth.")
+        token = base64.b64encode(f"{user}:{password}".encode()).decode()
+        return {"Authorization": f"Basic {token}"}
+    elif auth == "bearer":
+        if not bearer:
+            sys.exit("ERROR: --bearer-token is required for bearer auth.")
+        return {"Authorization": f"Bearer {bearer}"}
+    return {}
+
+def save_json(data, path: pathlib.Path):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+def fetch_json(url, headers, verify_ssl, timeout):
+    with build_session() as s:
+        r = s.get(url, headers=headers, timeout=timeout, verify=verify_ssl)
+        try:
+            r.raise_for_status()
+        except requests.HTTPError as e:
+            # Try to print JSON error body if present
+            try:
+                err = r.json()
+            except Exception:
+                err = r.text[:500]
+            sys.exit(f"HTTP {r.status_code} error for {url}:\n{err}\n{e}")
+        try:
+            return r.json()
+        except ValueError:
+            sys.exit(f"ERROR: Response from {url} is not JSON.")
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Download dataset definition JSON (and optional OpenAPI spec) from a UAT Swagger API."
+    )
+    parser.add_argument("--base-url", required=True, help="Base URL, e.g. https://uat-host.example.com")
+    parser.add_argument("--datasettype", required=True, help="Path param: {datasettype}")
+    parser.add_argument("--name", required=True, help="Path param: {name}")
+    parser.add_argument("--endpoint-template", default="/datasetcatalogue/v1/datasettype/{datasettype}/datasetdefinition/{name}",
+                        help="Endpoint template with {datasettype} and {name} placeholders.")
+    parser.add_argument("--auth", choices=["none", "basic", "bearer"], default="basic", help="Auth scheme.")
+    parser.add_argument("--user", help="Basic auth username")
+    parser.add_argument("--password", help="Basic auth password")
+    parser.add_argument("--bearer-token", help="Bearer token string")
+    parser.add_argument("--verify-ssl", default="true", choices=["true", "false"], help="Verify TLS certs (true/false).")
+    parser.add_argument("--timeout", type=int, default=30, help="Request timeout in seconds (default: 30).")
+    parser.add_argument("--out-dir", default="./out", help="Directory to save files (default: ./out).")
+    parser.add_argument("--spec-path", default=None,
+                        help="Optional OpenAPI path to also download (e.g., /v3/api-docs or /swagger.json).")
+    args = parser.parse_args()
+
+    verify_ssl = args.verify_ssl.lower() == "true"
+    out_dir = pathlib.Path(args.out_dir)
+    ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    headers = {"Accept": "application/json"}
+    headers.update(make_auth_header(args.auth, args.user, args.password, args.bearer_token))
+
+    # Build dataset definition URL
+    base = args.base_url.rstrip("/")
+    endpoint = args.endpoint_template.format(datasettype=args.datasettype, name=args.name)
+    url = f"{base}{endpoint}"
+
+    # Fetch dataset definition JSON
+    data = fetch_json(url, headers, verify_ssl, args.timeout)
+    out_file = out_dir / f"datasetdefinition_{args.datasettype}_{args.name}_{ts}.json"
+    save_json(data, out_file)
+    print(f"Saved dataset definition: {out_file}")
+
+    # Optionally fetch OpenAPI/Swagger spec
+    if args.spec_path:
+        spec_url = f"{base}{args.spec_path}"
+        spec = fetch_json(spec_url, headers, verify_ssl, args.timeout)
+        spec_file = out_dir / f"openapi_spec_{ts}.json"
+        save_json(spec, spec_file)
+        print(f"Saved API spec: {spec_file}")
+
+if __name__ == "__main__":
+    main()
