@@ -1,1 +1,140 @@
-sss
+#!/usr/bin/env python3
+# fetch_dataset_def_no_deps.py
+# Standard library only. Works in PyCharm without installing anything.
+
+import json, base64, datetime, pathlib, sys, time, ssl
+from urllib import request, error
+
+# ========= CONFIG (EDIT THESE) =========
+BASE_URL = "https://<your-uat-host>"   # e.g. https://data-abc-uat.example.com
+# Path copied from your Swagger:
+ENDPOINT_TEMPLATE = "/data/fabric/catalogue/v1/datasettype/{datasettype}/datasetdefinition/{name}"
+
+# From your screenshot (change if different)
+DATASETTYPE = "uscb_nfloans_rdp_db"
+NAME = "uscb_nfloans_rdp_db_pop_in_address_detail"
+
+# Auth (pick one)
+AUTH_SCHEME = "basic"      # "basic", "bearer", or "none"
+BASIC_USER  = "<username>"
+BASIC_PASS  = "<password>"
+BEARER_TOKEN = ""          # only if AUTH_SCHEME="bearer"
+
+# Extra headers if your gateway needs them (uncomment and fill)
+EXTRA_HEADERS = {
+    # "x-api-key": "<your-key>",
+    # "ocp-apim-subscription-key": "<key>",
+}
+
+VERIFY_SSL = False         # False for UAT/self-signed; True for proper certs
+TIMEOUT_SECS = 30
+RETRIES = 5
+BACKOFF_SECS = 0.8         # exponential backoff base
+
+# Save here (your requested path)
+OUT_DIR = pathlib.Path(r"C:\user\mrmr1\document\POC")
+# =======================================
+
+
+def build_headers():
+    headers = {"Accept": "application/json"}
+    if AUTH_SCHEME.lower() == "basic":
+        token = base64.b64encode(f"{BASIC_USER}:{BASIC_PASS}".encode()).decode()
+        headers["Authorization"] = f"Basic {token}"
+    elif AUTH_SCHEME.lower() == "bearer":
+        headers["Authorization"] = f"Bearer {BEARER_TOKEN}"
+    # merge extra headers
+    headers.update(EXTRA_HEADERS)
+    return headers
+
+
+def fetch_json(url: str, headers: dict):
+    # SSL context
+    ctx = None
+    if not VERIFY_SSL:
+        ctx = ssl._create_unverified_context()
+
+    req = request.Request(url, headers=headers, method="GET")
+
+    attempt = 0
+    while True:
+        try:
+            with request.urlopen(req, timeout=TIMEOUT_SECS, context=ctx) as resp:
+                ct = resp.headers.get("Content-Type", "")
+                body = resp.read()
+                # Decode JSON
+                try:
+                    return json.loads(body.decode("utf-8"))
+                except json.JSONDecodeError:
+                    preview = body[:1500]
+                    raise RuntimeError(
+                        f"Non-JSON response (Content-Type: {ct}). "
+                        f"First 1500 bytes: {preview!r}"
+                    )
+
+        except error.HTTPError as e:
+            body = e.read()
+            text = body.decode("utf-8", errors="replace")
+            # Helpful diagnostics
+            print("\n--- HTTP ERROR ---")
+            print(f"URL: {url}")
+            print(f"Status: {e.code}")
+            print("Response headers:")
+            for k, v in e.headers.items():
+                print(f"  {k}: {v}")
+            print("\nBody (first 1500 chars):")
+            print(text[:1500])
+            print("--- END HTTP ERROR ---\n")
+
+            # Retry only on transient codes
+            if e.code in (429, 500, 502, 503, 504) and attempt < RETRIES - 1:
+                sleep_s = BACKOFF_SECS * (2 ** attempt)
+                print(f"Retrying in {sleep_s:.1f}s...")
+                time.sleep(sleep_s)
+                attempt += 1
+                continue
+            # For 401/403 or others, stop with clear message
+            raise
+
+        except error.URLError as e:
+            # Network/SSL/DNS issues
+            print("\n--- NETWORK/SSL ERROR ---")
+            print(f"URL: {url}")
+            print(f"Reason: {e.reason}")
+            print("--- END NETWORK/SSL ERROR ---\n")
+            if attempt < RETRIES - 1:
+                sleep_s = BACKOFF_SECS * (2 ** attempt)
+                print(f"Retrying in {sleep_s:.1f}s...")
+                time.sleep(sleep_s)
+                attempt += 1
+                continue
+            raise
+
+
+def main():
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+
+    url = BASE_URL.rstrip("/") + ENDPOINT_TEMPLATE.format(
+        datasettype=DATASETTYPE,
+        name=NAME
+    )
+    print(f"➡ Fetching: {url}")
+    print(f"➡ SSL verify: {VERIFY_SSL}")
+    print(f"➡ Headers being sent: { {k: ('***' if k.lower()=='authorization' else v) for k,v in build_headers().items()} }")
+
+    try:
+        data = fetch_json(url, build_headers())
+    except Exception as ex:
+        # Fail with a single readable line at the end (after verbose above)
+        sys.exit(f"❌ Request failed: {ex}")
+
+    ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    out_file = OUT_DIR / f"datasetdefinition_{DATASETTYPE}_{NAME}_{ts}.json"
+    with open(out_file, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+    print(f"✅ Saved JSON -> {out_file}")
+
+
+if __name__ == "__main__":
+    main()
