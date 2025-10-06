@@ -1,1 +1,111 @@
-sss
+import json
+import base64
+import ssl
+from urllib import request
+import os
+from datetime import datetime
+import requests
+
+# ------------------------------------
+# CONFIG
+# ------------------------------------
+BASE_URL = "https://data-fabric-catalogue-uatlb.npl.apaas4.barclays.intranet"
+ENDPOINT = "/data/fabric/catalogue/v1/datasettype/uscb_rftloans_fdp_db/datasetdefinition/uscb_rftloans_fdp_db_pco_ln_address_details/raw"
+
+AUTH_SCHEME = "basic"   # or "bearer"
+USERNAME = "**"
+PASSWORD = "**"
+BEARER_TOKEN = ""       # only if AUTH_SCHEME = "bearer"
+
+VERIFY_SSL = False
+TIMEOUT = 30
+
+# Folder to save locally
+SAVE_PATH = r"C:\Users\x01532741\Documents\SwaggerPOC"
+
+
+# ------------------------------------
+# Build Headers
+# ------------------------------------
+def build_headers():
+    headers = {"Accept": "application/json"}
+    if AUTH_SCHEME.lower() == "basic":
+        token = base64.b64encode(f"{USERNAME}:{PASSWORD}".encode()).decode()
+        headers["Authorization"] = f"Basic {token}"
+    elif AUTH_SCHEME.lower() == "bearer":
+        headers["Authorization"] = f"Bearer {BEARER_TOKEN}"
+    return headers
+
+
+# ------------------------------------
+# Fetch JSON Data
+# ------------------------------------
+def fetch_json(url: str, headers: dict):
+    # ssl_context 
+    ctx = None
+    if not VERIFY_SSL:
+        ctx = ssl._create_unverified_context()
+
+    session = requests.Session()
+    session.verify = False  # Disable SSL verification if needed
+
+    try:
+        # Make actual request to your URL (not just the base URL)
+        req = session.get(url, headers=headers, timeout=TIMEOUT)
+        print(f"HTTP Status: {req.status_code}")
+
+        # Raise exception if bad status (4xx/5xx)
+        req.raise_for_status()
+
+        # Parse JSON
+        data = req.json()
+        print("\n✅ JSON fetched successfully!\n")
+        return data
+
+    except requests.exceptions.RequestException as e:
+        print(f"❌ Error fetching data: {e}")
+    except json.JSONDecodeError:
+        print("❌ Response is not valid JSON. Raw response:")
+        print(req.text)
+
+    return None
+
+
+# ------------------------------------
+# Save JSON Data Locally
+# ------------------------------------
+def save_json(data):
+    print("\nSaving JSON to local file in pretty format...\n")
+    os.makedirs(SAVE_PATH, exist_ok=True)
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    file_name = f"PCO_IN_ADDRESS_DETAILS_{timestamp}.json"
+    full_path = os.path.join(SAVE_PATH, file_name)
+
+    with open(full_path, "w", encoding="utf-8") as f:
+        f.write(json.dumps(data, ensure_ascii=False, indent=2))
+
+    print(f"\n✅ JSON saved successfully at:\n{full_path}\n")
+
+
+# ------------------------------------
+# Main Function
+# ------------------------------------
+def main():
+    url = BASE_URL.rstrip("/") + ENDPOINT
+    print(f"\nFetching JSON from URL:\n{url}\n")
+
+    headers = build_headers()
+    data = fetch_json(url, headers)
+
+    if data:
+        # Print JSON in readable format
+        print(json.dumps(data, indent=2, ensure_ascii=False))
+        # Save locally
+        save_json(data)
+    else:
+        print("⚠️ No valid JSON data received. File not saved.")
+
+
+if __name__ == "__main__":
+    main()
