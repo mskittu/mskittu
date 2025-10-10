@@ -1,1 +1,102 @@
-sss
+
+import json
+
+def compare_schema_fields(file1, file2):
+    # Load both JSON files
+    with open(file1, 'r') as f1, open(file2, 'r') as f2:
+        qa_data = json.load(f1)
+        prod_data = json.load(f2)
+
+    # Extract schema fields from both JSONs
+    qa_fields = qa_data.get('schema', {}).get('fields', [])
+    prod_fields = prod_data.get('schema', {}).get('fields', [])
+
+    # Convert list of fields into a dictionary for easy comparison
+    qa_dict = {field["name"]: field for field in qa_fields}
+    prod_dict = {field["name"]: field for field in prod_fields}
+
+    # Compare both sets
+    all_field_names = set(qa_dict.keys()).union(set(prod_dict.keys()))
+    differences = []
+
+    for name in sorted(all_field_names):
+        qa_field = qa_dict.get(name)
+        prod_field = prod_dict.get(name)
+
+        if qa_field and not prod_field:
+            differences.append(f"Field '{name}' present in QA but missing in PROD.")
+        elif prod_field and not qa_field:
+            differences.append(f"Field '{name}' present in PROD but missing in QA.")
+        else:
+            # Compare description and datatype
+            for key in ["description", "dataType"]:
+                qa_val = qa_field.get(key, "").strip()
+                prod_val = prod_field.get(key, "").strip()
+                if qa_val != prod_val:
+                    differences.append(
+                        f"Field '{name}' differs in '{key}': QA='{qa_val}' vs PROD='{prod_val}'"
+                    )
+
+    # Print summary
+    if differences:
+        print("Differences found between QA and PROD schema fields:\n")
+        for diff in differences:
+            print("-", diff)
+    else:
+        print("✅ No differences found in schema fields between QA and PROD.")
+
+# Example usage
+compare_schema_fields(
+    "PCO_IN_ADDRESS_DETAILS_QA_20251007_204950.json",
+    "PCO_IN_ADDRESS_DETAILS_PROD_20251007_204950.json"
+)import json
+
+def compare_schema_fields(file1, file2):
+    # Load both JSON files
+    with open(file1, 'r') as f1, open(file2, 'r') as f2:
+        qa_data = json.load(f1)
+        prod_data = json.load(f2)
+
+    # Extract schema fields from both JSONs
+    qa_fields = qa_data.get('schema', {}).get('fields', [])
+    prod_fields = prod_data.get('schema', {}).get('fields', [])
+
+    # Convert list of fields into a dictionary for easy comparison
+    qa_dict = {field["name"]: field for field in qa_fields}
+    prod_dict = {field["name"]: field for field in prod_fields}
+
+    # Compare both sets
+    all_field_names = set(qa_dict.keys()).union(set(prod_dict.keys()))
+    differences = []
+
+    for name in sorted(all_field_names):
+        qa_field = qa_dict.get(name)
+        prod_field = prod_dict.get(name)
+
+        if qa_field and not prod_field:
+            differences.append(f"Field '{name}' present in QA but missing in PROD.")
+        elif prod_field and not qa_field:
+            differences.append(f"Field '{name}' present in PROD but missing in QA.")
+        else:
+            # Compare description and datatype
+            for key in ["description", "dataType"]:
+                qa_val = qa_field.get(key, "").strip()
+                prod_val = prod_field.get(key, "").strip()
+                if qa_val != prod_val:
+                    differences.append(
+                        f"Field '{name}' differs in '{key}': QA='{qa_val}' vs PROD='{prod_val}'"
+                    )
+
+    # Print summary
+    if differences:
+        print("Differences found between QA and PROD schema fields:\n")
+        for diff in differences:
+            print("-", diff)
+    else:
+        print("✅ No differences found in schema fields between QA and PROD.")
+
+# Example usage
+compare_schema_fields(
+    "PCO_IN_ADDRESS_DETAILS_QA_20251007_204950.json",
+    "PCO_IN_ADDRESS_DETAILS_PROD_20251007_204950.json"
+)
