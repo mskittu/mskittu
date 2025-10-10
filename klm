@@ -1,1 +1,142 @@
-sss
+from pathlib import Path
+import json
+import csv
+from typing import List, Dict, Any
+
+# === CONFIG: update ONLY this folder if needed ===
+BASE_DIR = Path(r"C:\Users\x01532741\Documents\SwaggerPOC")
+
+# Optional: change these if your file names use different tokens
+QA_TOKEN = "QA"
+PROD_TOKEN = "PROD"
+
+def find_latest_file(folder: Path, token: str) -> Path:
+    """Find the most recently modified JSON file that contains the token."""
+    candidates = sorted(
+        (p for p in folder.glob("*.json") if token.lower() in p.name.lower()),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+    if not candidates:
+        raise FileNotFoundError(
+            f"No JSON files containing '{token}' found in {folder}"
+        )
+    return candidates[0]
+
+def load_json(path: Path) -> Dict[str, Any]:
+    """Load JSON with UTF-8 (tolerant to BOM)."""
+    with path.open("r", encoding="utf-8-sig") as f:
+        return json.load(f)
+
+def extract_schema_fields(doc: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """
+    Try multiple common locations to get the schema fields array.
+    Returns [] if not found.
+    """
+    # 1) Root: {"schema": {"fields": [...]}}
+    fields = doc.get("schema", {}).get("fields")
+    if isinstance(fields, list):
+        return fields
+
+    # 2) Inside aspects: [{"name": "data", ..., "schema": {"fields": [...]}}]
+    aspects = doc.get("aspects")
+    if isinstance(aspects, list):
+        for a in aspects:
+            if not isinstance(a, dict):
+                continue
+            # common keys seen in mesh metadata dumps
+            for key in ("schema", "content", "value"):
+                inner = a.get(key, {})
+                if isinstance(inner, dict):
+                    flds = inner.get("fields")
+                    if isinstance(flds, list):
+                        return flds
+
+    # 3) Nothing worked
+    return []
+
+def to_index_map(fields: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+    """Map by field name for easy diffing."""
+    result = {}
+    for f in fields:
+        name = (f.get("name") or "").strip()
+        if name:
+            result[name] = f
+    return result
+
+def compare_fields(qa_map: Dict[str, Dict[str, Any]],
+                   prod_map: Dict[str, Dict[str, Any]]) -> List[Dict[str, str]]:
+    """
+    Return list of differences as dict rows:
+    {"field","issue","qa","prod"}
+    """
+    rows = []
+    all_names = set(qa_map) | set(prod_map)
+    for name in sorted(all_names):
+        q = qa_map.get(name)
+        p = prod_map.get(name)
+        if q and not p:
+            rows.append({"field": name, "issue": "Missing in PROD", "qa": "present", "prod": "absent"})
+            continue
+        if p and not q:
+            rows.append({"field": name, "issue": "Missing in QA", "qa": "absent", "prod": "present"})
+            continue
+
+        # compare values
+        for key in ("description", "dataType"):
+            qv = (q.get(key, "") or "").strip()
+            pv = (p.get(key, "") or "").strip()
+            if qv != pv:
+                rows.append({
+                    "field": name,
+                    "issue": f"Diff in {key}",
+                    "qa": qv,
+                    "prod": pv
+                })
+    return rows
+
+def main():
+    folder = BASE_DIR
+    if not folder.exists():
+        raise FileNotFoundError(f"Folder does not exist: {folder}")
+
+    qa_path = find_latest_file(folder, QA_TOKEN)
+    prod_path = find_latest_file(folder, PROD_TOKEN)
+
+    print(f"Using QA file  : {qa_path.name}")
+    print(f"Using PROD file: {prod_path.name}")
+
+    qa_doc = load_json(qa_path)
+    prod_doc = load_json(prod_path)
+
+    qa_fields = extract_schema_fields(qa_doc)
+    prod_fields = extract_schema_fields(prod_doc)
+
+    if not qa_fields:
+        raise ValueError(f"'schema->fields' not found in QA file: {qa_path.name}")
+    if not prod_fields:
+        raise ValueError(f"'schema->fields' not found in PROD file: {prod_path.name}")
+
+    qa_map = to_index_map(qa_fields)
+    prod_map = to_index_map(prod_fields)
+
+    diffs = compare_fields(qa_map, prod_map)
+
+    if not diffs:
+        print("✅ No differences in schema fields (name/description/dataType).")
+        return
+
+    print("\nDifferences found:\n")
+    for d in diffs:
+        print(f"- {d['field']}: {d['issue']} | QA='{d['qa']}' | PROD='{d['prod']}'")
+
+    # Save to CSV
+    out_csv = folder / "schema_differences.csv"
+    with out_csv.open("w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=["field", "issue", "qa", "prod"])
+        w.writeheader()
+        w.writerows(diffs)
+    print(f"\n💾 Saved CSV report: {out_csv}")
+
+if __name__ == "__main__":
+    main()
