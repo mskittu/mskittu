@@ -1,7 +1,1 @@
-export LAST_DATE_PREV_MONTH=20240630
-
-export LAST_DATE_THREE_MONTH=$(
-  date -d "$(date -d "$LAST_DATE_PREV_MONTH -3 month" +%Y-%m-01) +1 month -1 day" +%Y%m%d
-)
-
-echo "$LAST_DATE_THREE_MONTH"
+ssss
