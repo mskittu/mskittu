@@ -1,1 +1,20 @@
-ssss
+SELECT
+    SUM(
+        ASCII(
+            CASE
+                WHEN acct_cyc.annl_fee_dscr IS NULL THEN 'N'
+                ELSE 'Y'
+            END
+        )
+    ) AS CCAR_SUBJ_ANN_FEE
+FROM SRC_STMT_DBA.ACCT_CYCL_C acct_cyc
+WHERE acct_cyc.EFF_DT BETWEEN TRUNC(ADD_MONTHS(TO_DATE('20251130','YYYYMMDD'), -1), 'MM')
+                          AND TO_DATE('20251130','YYYYMMDD')
+  AND acct_cyc.CURR_CYCL_NBR NOT IN (28)
+  AND acct_cyc.SEX_NBR = 0
+  AND acct_cyc.EXTNL_ACCT_ID IN (
+        SELECT acct.EXTNL_ACCT_ID
+        FROM DMT_ASP_DBA.ASP_EOM_ACCT_SUM acct
+        WHERE acct.RPTG_PRD_MNTH_BID = SUBSTR('20251130', 1, 6)
+          AND acct.RETM_CD = 'C'
+  );
