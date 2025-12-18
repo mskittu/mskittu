@@ -1,1 +1,24 @@
-sss
+WITH acct_cycle AS (
+    SELECT
+        acct_cyc.extnl_acct_id,
+        acct_cyc.annl_fee_dscr,
+        ROW_NUMBER() OVER (
+            PARTITION BY acct_cyc.extnl_acct_id
+            ORDER BY acct_cyc.eff_dt DESC
+        ) AS rn
+    FROM src_stmt_dba.acct_cycl_c acct_cyc
+    WHERE acct_cyc.eff_dt = DATE '2025-11-30'
+)
+SELECT
+    f1.extnl_acct_id,
+    CAST(
+        CASE
+            WHEN f1.annl_fee_dscr IS NULL THEN 'N'
+            ELSE 'Y'
+        END AS VARCHAR2(1)
+    ) AS ccar_subj_ann_fee
+FROM acct_cycle f1
+INNER JOIN extracted_ids e1
+    ON f1.extnl_acct_id = e1.extnl_acct_id
+WHERE f1.rn = 1
+  AND e1.eff_dt = DATE '2025-11-30';
