@@ -1,1 +1,223 @@
-sss
+import os
+import fnmatch
+import hashlib
+import argparse
+import difflib
+from dataclasses import dataclass
+from typing import List, Optional, Set
+
+
+# ---------------- Defaults ----------------
+DEFAULT_IGNORE_DIRS: Set[str] = {
+    ".git", ".idea", ".vscode", "__pycache__", "target", "build", "dist"
+}
+
+DEFAULT_IGNORE_GLOBS: List[str] = [
+    "*.iml", "*.class", "*.jar", "*.zip", "*.parquet", "*.avro", "*.orc"
+]
+
+
+# ---------------- Utils ----------------
+def should_ignore(rel_path: str, ignore_globs: List[str]) -> bool:
+    rel_path = rel_path.replace("\\", "/")
+    return any(fnmatch.fnmatch(rel_path, pat) for pat in ignore_globs)
+
+
+def walk_files(root: str, ignore_dirs: Set[str], ignore_globs: List[str]) -> List[str]:
+    out: List[str] = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        # prune ignored dirs
+        dirnames[:] = [d for d in dirnames if d not in ignore_dirs]
+
+        for name in filenames:
+            abs_path = os.path.join(dirpath, name)
+            rel_path = os.path.relpath(abs_path, root).replace("\\", "/")
+            if should_ignore(rel_path, ignore_globs):
+                continue
+            out.append(rel_path)
+
+    return sorted(out)
+
+
+def is_binary_file(path: str, sample_size: int = 4096) -> bool:
+    try:
+        with open(path, "rb") as f:
+            chunk = f.read(sample_size)
+        return b"\x00" in chunk
+    except Exception:
+        return True
+
+
+def sha256_file(path: str) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for block in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(block)
+    return h.hexdigest()
+
+
+def read_text_file(path: str) -> List[str]:
+    # tolerant read (handles encoding issues)
+    with open(path, "r", encoding="utf-8", errors="replace") as f:
+        return f.read().splitlines(keepends=True)
+
+
+def ext_ok(rel_path: str, only_ext: Optional[List[str]]) -> bool:
+    if not only_ext:
+        return True
+    lp = rel_path.lower()
+    return any(lp.endswith(e.lower()) for e in only_ext)
+
+
+# ---------------- Results ----------------
+@dataclass
+class DiffResult:
+    rel_path: str
+    status: str  # PASS / DIFFERENT / MISSING_IN_GITLAB / EXTRA_IN_GITLAB / BINARY_PASS / BINARY_DIFFERENT
+    details: Optional[str] = None
+
+
+def unified_diff_text(left_abs: str, right_abs: str, rel_path: str, context: int) -> str:
+    left_lines = read_text_file(left_abs)
+    right_lines = read_text_file(right_abs)
+
+    diff = difflib.unified_diff(
+        left_lines,
+        right_lines,
+        fromfile=f"Bitbucket-Files/{rel_path}",
+        tofile=f"Gitlab-Files/{rel_path}",
+        n=context,
+        lineterm=""
+    )
+    return "\n".join(diff)
+
+
+def compare_folders(
+    bitbucket_root: str,
+    gitlab_root: str,
+    ignore_dirs: Set[str],
+    ignore_globs: List[str],
+    only_ext: Optional[List[str]],
+    show_pass: bool,
+    context: int
+) -> List[DiffResult]:
+
+    bb_files = walk_files(bitbucket_root, ignore_dirs, ignore_globs)
+    gl_files = walk_files(gitlab_root, ignore_dirs, ignore_globs)
+
+    bb_set, gl_set = set(bb_files), set(gl_files)
+    all_paths = sorted(bb_set.union(gl_set))
+
+    results: List[DiffResult] = []
+
+    for rel_path in all_paths:
+        if not ext_ok(rel_path, only_ext):
+            continue
+
+        bb_abs = os.path.join(bitbucket_root, rel_path)
+        gl_abs = os.path.join(gitlab_root, rel_path)
+
+        in_bb = rel_path in bb_set
+        in_gl = rel_path in gl_set
+
+        if in_bb and not in_gl:
+            results.append(DiffResult(rel_path, "MISSING_IN_GITLAB"))
+            continue
+
+        if in_gl and not in_bb:
+            results.append(DiffResult(rel_path, "EXTRA_IN_GITLAB"))
+            continue
+
+        # both exist
+        bb_bin = is_binary_file(bb_abs)
+        gl_bin = is_binary_file(gl_abs)
+
+        if bb_bin or gl_bin:
+            same = sha256_file(bb_abs) == sha256_file(gl_abs)
+            if same:
+                if show_pass:
+                    results.append(DiffResult(rel_path, "BINARY_PASS"))
+            else:
+                results.append(DiffResult(rel_path, "BINARY_DIFFERENT", "Binary files differ (hash mismatch)."))
+            continue
+
+        left_lines = read_text_file(bb_abs)
+        right_lines = read_text_file(gl_abs)
+
+        if left_lines == right_lines:
+            if show_pass:
+                results.append(DiffResult(rel_path, "PASS"))
+        else:
+            diff_text = unified_diff_text(bb_abs, gl_abs, rel_path, context=context)
+            results.append(DiffResult(rel_path, "DIFFERENT", diff_text))
+
+    return results
+
+
+def print_report(results: List[DiffResult], max_diff_lines: int = 500) -> int:
+    counts = {}
+    for r in results:
+        counts[r.status] = counts.get(r.status, 0) + 1
+
+    print("\n========== SUMMARY ==========")
+    for k in sorted(counts.keys()):
+        print(f"{k}: {counts[k]}")
+    print("=============================\n")
+
+    exit_code = 0
+    for r in results:
+        print(f"[{r.status}] {r.rel_path}")
+        if r.details:
+            lines = r.details.splitlines()
+            if len(lines) > max_diff_lines:
+                print("\n".join(lines[:max_diff_lines]))
+                print(f"... (diff truncated, showing first {max_diff_lines} lines)")
+            else:
+                print(r.details)
+        print("-" * 90)
+
+        if r.status in {"DIFFERENT", "MISSING_IN_GITLAB", "EXTRA_IN_GITLAB", "BINARY_DIFFERENT"}:
+            exit_code = 1
+
+    return exit_code
+
+
+def main():
+    ap = argparse.ArgumentParser(
+        description="Compare two local folders: Bitbucket-Files vs Gitlab-Files (recursive)."
+    )
+    ap.add_argument("--bitbucket", required=True, help="Path to Bitbucket-Files folder")
+    ap.add_argument("--gitlab", required=True, help="Path to Gitlab-Files folder")
+    ap.add_argument("--show-pass", action="store_true", help="Also print PASS files")
+    ap.add_argument("--context", type=int, default=3, help="Diff context lines (default 3)")
+    ap.add_argument("--only-ext", nargs="*", default=None,
+                    help="Compare only these extensions. Example: --only-ext .py .scala .sql .xml .conf")
+    ap.add_argument("--ignore", nargs="*", default=DEFAULT_IGNORE_GLOBS,
+                    help="Ignore patterns (glob). Example: --ignore '*.iml' 'target/*'")
+
+    args = ap.parse_args()
+
+    bitbucket_root = os.path.abspath(args.bitbucket)
+    gitlab_root = os.path.abspath(args.gitlab)
+
+    if not os.path.isdir(bitbucket_root):
+        raise SystemExit(f"ERROR: Bitbucket folder not found: {bitbucket_root}")
+    if not os.path.isdir(gitlab_root):
+        raise SystemExit(f"ERROR: Gitlab folder not found: {gitlab_root}")
+
+    results = compare_folders(
+        bitbucket_root=bitbucket_root,
+        gitlab_root=gitlab_root,
+        ignore_dirs=DEFAULT_IGNORE_DIRS,
+        ignore_globs=args.ignore,
+        only_ext=args.only_ext,
+        show_pass=args.show_pass,
+        context=args.context,
+    )
+
+    code = print_report(results)
+    raise SystemExit(code)
+
+
+if __name__ == "__main__":
+    main()
