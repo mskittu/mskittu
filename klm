@@ -1,12 +1,1 @@
-#!/bin/bash
-set -euo pipefail
-
-# --- Get last date of previous month in YYYYMMDD ---
-# Works on Linux (GNU date)
-LAST_PREV_MONTH=$(date -d "$(date +%Y-%m-01) -1 day" +%Y%m%d)
-
-# --- Touch the file using your path variables ---
-# (Make sure these env vars are already set: EDGENODE_ROOT_DIR, JOB_GROUP, JOB_NAME)
-touch "${EDGENODE_ROOT_DIR}/job_date/${JOB_GROUP}/${JOB_NAME}/date/${LAST_PREV_MONTH}"
-
-echo "Touched: ${EDGENODE_ROOT_DIR}/job_date/${JOB_GROUP}/${JOB_NAME}/date/${LAST_PREV_MONTH}"
+sss
