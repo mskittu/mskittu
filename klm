@@ -1,18 +1,1 @@
-SELECT
-  COUNT(*) AS total_rows,
-
-  SUM(WRITE_OFF) AS sum_write_off,
-  COUNT(WRITE_OFF) AS cnt_write_off_not_null,
-
-  SUM(ASCII(DLNQT_CD)) AS sum_ascii_dlnqt_cd,
-  SUM(CASE WHEN DLNQT_CD IS NOT NULL THEN 1 ELSE 0 END) AS cnt_dlnqt_cd_not_null,
-
-  SUM(ASCII(HRAM_FLAG)) AS sum_ascii_hram_flag,
-  SUM(CASE WHEN HRAM_FLAG IS NOT NULL THEN 1 ELSE 0 END) AS cnt_hram_flag_not_null
-
-FROM usrf_pub_rft_mdl.FIN_MDS_FACT_MTD_C
-WHERE PTN_VAL_TXT = '20260131'
-  AND "BD4" = 'Impairment BTB';
-
-
-
+sss
