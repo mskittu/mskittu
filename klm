@@ -1,9 +1,1 @@
-#!/bin/bash
-
-# Calculate last date of previous month (YYYYMMDD)
-export LAST_DATE_PREV_MONTH=$(date -d "$(date +%Y-%m-01) -1 day" +%Y%m%d)
-
-echo "Last date of previous month: $LAST_DATE_PREV_MONTH"
-
-# Use it in touch command
-touch $EDGENODE_ROOT_DIR/job_date/$JOB_GROUP/$JOB_NAME/date/$LAST_DATE_PREV_MONTH
+sss
