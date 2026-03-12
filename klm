@@ -1,1 +1,150 @@
-sss
+#!/usr/bin/env python3
+
+import argparse
+import logging
+import os
+import sys
+from pathlib import Path
+from urllib.parse import urlparse
+
+import boto3
+from botocore.exceptions import BotoCoreError, ClientError
+
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(message)s"
+)
+logger = logging.getLogger(__name__)
+
+
+def parse_s3_path(s3_path: str):
+    if not s3_path.startswith("s3://"):
+        raise ValueError(f"Invalid S3 path: {s3_path}")
+
+    parsed = urlparse(s3_path)
+    bucket = parsed.netloc
+    prefix = parsed.path.lstrip("/")
+    return bucket, prefix
+
+
+def get_session(profile_name: str):
+    if not profile_name:
+        raise ValueError("AWS profile name is missing")
+    return boto3.Session(profile_name=profile_name)
+
+
+def list_s3_files(s3_client, bucket: str, prefix: str):
+    file_keys = []
+    paginator = s3_client.get_paginator("list_objects_v2")
+
+    for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+        for obj in page.get("Contents", []):
+            key = obj["Key"]
+            if not key.endswith("/"):
+                file_keys.append(key)
+
+    return file_keys
+
+
+def download_s3_to_local(source_s3_path: str, local_dir: str, source_profile: str):
+    bucket, prefix = parse_s3_path(source_s3_path)
+
+    session = get_session(source_profile)
+    s3_client = session.client("s3")
+
+    Path(local_dir).mkdir(parents=True, exist_ok=True)
+
+    logger.info("Reading source files from %s", source_s3_path)
+    keys = list_s3_files(s3_client, bucket, prefix)
+
+    if not keys:
+        logger.warning("No files found in source path: %s", source_s3_path)
+        return
+
+    logger.info("Total source files found: %d", len(keys))
+
+    for key in keys:
+        relative_path = os.path.relpath(key, prefix) if prefix else key
+        local_file_path = os.path.join(local_dir, relative_path)
+
+        os.makedirs(os.path.dirname(local_file_path), exist_ok=True)
+
+        logger.info("Downloading s3://%s/%s -> %s", bucket, key, local_file_path)
+        s3_client.download_file(bucket, key, local_file_path)
+
+    logger.info("Download completed successfully")
+
+
+def upload_local_to_s3(local_dir: str, target_s3_path: str, target_profile: str):
+    bucket, prefix = parse_s3_path(target_s3_path)
+
+    session = get_session(target_profile)
+    s3_client = session.client("s3")
+
+    base_path = Path(local_dir)
+    if not base_path.exists():
+        raise FileNotFoundError(f"Local path does not exist: {local_dir}")
+
+    files = [p for p in base_path.rglob("*") if p.is_file()]
+
+    if not files:
+        logger.warning("No files found in local path: %s", local_dir)
+        return
+
+    logger.info("Total files to upload: %d", len(files))
+
+    for file_path in files:
+        relative_path = file_path.relative_to(base_path).as_posix()
+        s3_key = f"{prefix.rstrip('/')}/{relative_path}" if prefix else relative_path
+
+        logger.info("Uploading %s -> s3://%s/%s", file_path, bucket, s3_key)
+        s3_client.upload_file(str(file_path), bucket, s3_key)
+
+    logger.info("Upload completed successfully")
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Copy files from Source AWS account S3 to local Unix path and then to Target AWS account S3"
+    )
+
+    parser.add_argument("source_s3_path", help="Source S3 path, example: s3://uat-bucket/folder/")
+    parser.add_argument("target_s3_path", help="Target S3 path, example: s3://dev-bucket/folder/")
+    parser.add_argument("p2p_qa_unix_path", help="Unix path, example: /data/p2p_qa/files")
+
+    args = parser.parse_args()
+
+    source_profile = os.getenv("SOURCE_AWS_PROFILE")
+    target_profile = os.getenv("TARGET_AWS_PROFILE")
+
+    if not source_profile:
+        raise ValueError("Set SOURCE_AWS_PROFILE environment variable")
+
+    if not target_profile:
+        raise ValueError("Set TARGET_AWS_PROFILE environment variable")
+
+    try:
+        logger.info("Step 1 started: Source S3 -> Local Unix Path")
+        download_s3_to_local(
+            source_s3_path=args.source_s3_path,
+            local_dir=args.p2p_qa_unix_path,
+            source_profile=source_profile
+        )
+
+        logger.info("Step 2 started: Local Unix Path -> Target S3")
+        upload_local_to_s3(
+            local_dir=args.p2p_qa_unix_path,
+            target_s3_path=args.target_s3_path,
+            target_profile=target_profile
+        )
+
+        logger.info("Process completed successfully")
+
+    except (ValueError, FileNotFoundError, BotoCoreError, ClientError, Exception) as exc:
+        logger.error("Process failed: %s", exc)
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
