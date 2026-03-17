@@ -1,1 +1,44 @@
-sss
+mds_accuracy_completeness_job_run()
+{
+    export v_mds_exitcode=0
+
+    LAST_DATE_PREV_MONTH=$(date -d "$(date +%Y-%m-01) -1 day" +%Y%m%d)
+
+    INFO "Job_Run_Status: MDS ACCURACY / COMPLETENESS JOB RUN STARTED"
+
+    NOTICE "CALLING - MDS_ACCURACY"
+
+    touch ${EDGENODE_ROOT_DIR}/job_date/fin_recon/mds_accuracy/date/${LAST_DATE_PREV_MONTH}
+
+    /apps/tenant_local/usrf/util/run/script/aptr/RunJob.sh fin_recon mds_accuracy
+    ACCURACY_STATUS=$?
+
+    if [[ ${ACCURACY_STATUS} -ne 0 ]]; then
+        NOTICE "COMPLETED - MDS_ACCURACY NE 0"
+        INFO "Job_Run_Status: MDS ACCURACY JOB RUN FAILED"
+        echo "Model_Datastore,MDS:MDS_Accuracy,FAIL,BD2:5,Impairment BTB" >> ${INPUT_FILE_PATH}/model_datastore_workflow.dat
+        export v_mds_exitcode=1
+    else
+        NOTICE "COMPLETED - MDS_ACCURACY EQ 0"
+        INFO "Job_Run_Status: MDS ACCURACY JOB RUN SUCCESSFUL"
+        echo "Model_Datastore,MDS:MDS_Accuracy,PASS,BD2:5,Impairment BTB" >> ${INPUT_FILE_PATH}/model_datastore_workflow.dat
+
+        NOTICE "CALLING - MDS_COMPLETENESS"
+
+        touch ${EDGENODE_ROOT_DIR}/job_date/fin_recon/mds_completeness/date/${LAST_DATE_PREV_MONTH}
+
+        /apps/tenant_local/usrf/util/run/script/aptr/RunJob.sh fin_recon mds_completeness
+        COMPLETENESS_STATUS=$?
+
+        if [[ ${COMPLETENESS_STATUS} -ne 0 ]]; then
+            NOTICE "COMPLETED - MDS_COMPLETENESS NE 0"
+            INFO "Job_Run_Status: MDS COMPLETENESS JOB RUN FAILED"
+            echo "Model_Datastore,MDS:MDS_Completeness,FAIL,BD2:5,Impairment BTB" >> ${INPUT_FILE_PATH}/model_datastore_workflow.dat
+            export v_mds_exitcode=1
+        else
+            NOTICE "COMPLETED - MDS_COMPLETENESS EQ 0"
+            INFO "Job_Run_Status: MDS COMPLETENESS JOB RUN SUCCESSFUL"
+            echo "Model_Datastore,MDS:MDS_Completeness,PASS,BD2:5,Impairment BTB" >> ${INPUT_FILE_PATH}/model_datastore_workflow.dat
+        fi
+    fi
+}
