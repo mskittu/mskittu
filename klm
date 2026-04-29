@@ -1,1 +1,57 @@
-sss
+basel_feeder_gen()
+{
+    export FILE_PATH_INBOUND="/apps/tenant_local/usrf/stage/export/barclays/finance/airb_feeder_inbound"
+    INBOUND_DATE="${LAST_DATE_PREV_MONTH:0:6}"
+    INPUT_FILE_PATH="${INPUT_FILE_PATH:-.}"
+
+    if [ -f "${FILE_PATH_INBOUND}/pit_data_${INBOUND_DATE}.csv" ]; then
+
+        INFO "Job_Run_Status: Basel Feeder Files are present"
+
+        echo "Moniker_Dataset,Upstream_File:Basel_Feeder_Score(PD19),PASS,BD5,SAS RTB Team" \
+            >> "${INPUT_FILE_PATH}/model_datastore_workflow.dat"
+
+        touch "${EDGENODE_ROOT_DIR}/job_date/fin_export/export_basel_feeder_info/date/${LAST_DATE_PREV_MONTH}"
+
+        NOTICE "CALLING - EXPORT_BASEL_FEEDER_INFO"
+        /apps/tenant_local/usrf/util/run/script/aptr/RunJob.sh fin_export export_basel_feeder_info
+        rc=$?
+
+        if [ ${rc} -ne 0 ]; then
+            NOTICE "COMPLETED - EXPORT_BASEL_FEEDER_INFO NE 0"
+            echo "Moniker_Dataset,Transfer_Basel_Feeder_Score(PD19),FAIL,BD5,Impairment BTB" \
+                >> "${INPUT_FILE_PATH}/model_datastore_workflow.dat"
+        else
+            NOTICE "COMPLETED - EXPORT_BASEL_FEEDER_INFO EQ 0"
+            echo "Moniker_Dataset,Transfer_Basel_Feeder_Score(PD19),PASS,BD5,Impairment BTB" \
+                >> "${INPUT_FILE_PATH}/model_datastore_workflow.dat"
+        fi
+
+    else
+
+        query_status=$(hive -S -e "
+            SELECT CASE 
+                     WHEN COUNT(*) > 0 THEN 'PASS'
+                     ELSE 'Pending'
+                   END AS status
+            FROM ${INGEST_DB}.airb_pit_model_output
+            WHERE cob_date = '${LAST_DATE_PREV_MONTH}';
+        ")
+
+        if [ "${query_status}" = "PASS" ]; then
+            echo "Moniker_Dataset,Upstream_File:Basel_Feeder_Score(PD19),PASS,BD5,SAS RTB Team" \
+                >> "${INPUT_FILE_PATH}/model_datastore_workflow.dat"
+
+            echo "Moniker_Dataset,Transfer_Basel_Feeder_Score(PD19),PASS,BD5,Impairment BTB" \
+                >> "${INPUT_FILE_PATH}/model_datastore_workflow.dat"
+
+        elif [ "${query_status}" = "Pending" ]; then
+            echo "Moniker_Dataset,Upstream_File:Basel_Feeder_Score(PD19),Pending,BD5,SAS RTB Team" \
+                >> "${INPUT_FILE_PATH}/model_datastore_workflow.dat"
+
+            echo "Moniker_Dataset,Transfer_Basel_Feeder_Score(PD19),Pending,BD5,Impairment BTB" \
+                >> "${INPUT_FILE_PATH}/model_datastore_workflow.dat"
+        fi
+
+    fi
+}
