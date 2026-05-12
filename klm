@@ -1,1 +1,47 @@
-sss
+import requests
+import urllib3
+from requests.auth import HTTPBasicAuth
+
+urllib3.disable_warnings()
+
+# ── UPDATE THESE ONLY ──────────────────────────────────────────
+TWS_HOST     = "https://twsus-prod.barcapint.com:9443"
+TWS_USER     = "x01532741"
+TWS_PASSWORD = "your_tws_password"   # <-- replace with your password
+# ──────────────────────────────────────────────────────────────
+
+print("Testing TWS connection...")
+print(f"Host : {TWS_HOST}")
+print(f"User : {TWS_USER}")
+print()
+
+session = requests.Session()
+session.verify = False
+
+try:
+    # Hit login page to get session cookie
+    session.get(f"{TWS_HOST}/console/login.jsp", timeout=10)
+
+    # Submit login form
+    r = session.post(
+        f"{TWS_HOST}/console/j_security_check",
+        data={"j_username": TWS_USER, "j_password": TWS_PASSWORD},
+        timeout=10,
+        allow_redirects=True
+    )
+
+    if "login" in r.url.lower():
+        print("FAIL  Wrong username or password")
+    else:
+        print(f"OK    Login successful")
+        print(f"OK    TWS connection is WORKING")
+        print(f"      Redirected to: {r.url}")
+
+except requests.exceptions.ConnectionError:
+    print("FAIL  Cannot reach TWS server — check VPN")
+
+except requests.exceptions.Timeout:
+    print("FAIL  Connection timed out — check VPN")
+
+except Exception as e:
+    print(f"FAIL  {e}")
