@@ -1,0 +1,1119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI-Powered Data Validation Framework — Client Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Space+Mono:wght@400;700&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0e1a;
+    --surface: #111827;
+    --surface2: #1a2235;
+    --border: rgba(255,255,255,0.07);
+    --border2: rgba(255,255,255,0.12);
+    --text: #f0f4ff;
+    --muted: #7a8aaa;
+    --accent: #4f8ef7;
+    --accent2: #7c5cfc;
+    --green: #22d3a0;
+    --amber: #f59e0b;
+    --red: #f43f5e;
+    --teal: #06b6d4;
+    --font-head: 'Syne', sans-serif;
+    --font-body: 'DM Sans', sans-serif;
+    --font-mono: 'Space Mono', monospace;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:var(--bg); color:var(--text); font-family:var(--font-body); min-height:100vh; overflow-x:hidden; }
+
+  /* background grid */
+  body::before {
+    content:''; position:fixed; inset:0; z-index:0;
+    background-image: linear-gradient(rgba(79,142,247,0.03) 1px, transparent 1px),
+                      linear-gradient(90deg, rgba(79,142,247,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events:none;
+  }
+
+  /* NAV */
+  nav {
+    position:sticky; top:0; z-index:100;
+    background:rgba(10,14,26,0.85); backdrop-filter:blur(20px);
+    border-bottom:1px solid var(--border);
+    display:flex; align-items:center; justify-content:space-between;
+    padding:0 32px; height:60px;
+  }
+  .nav-brand { font-family:var(--font-head); font-size:15px; font-weight:800; letter-spacing:.02em;
+    background:linear-gradient(90deg, var(--accent), var(--accent2)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+  .nav-tabs { display:flex; gap:4px; }
+  .nav-tab { padding:6px 16px; border-radius:6px; font-size:13px; font-weight:500; cursor:pointer;
+    color:var(--muted); border:none; background:transparent; transition:all .2s; }
+  .nav-tab.active, .nav-tab:hover { background:var(--surface2); color:var(--text); }
+  .nav-badge { font-family:var(--font-mono); font-size:11px; background:rgba(34,211,160,0.12);
+    color:var(--green); padding:4px 12px; border-radius:20px; border:1px solid rgba(34,211,160,0.2); }
+
+  /* LAYOUT */
+  .page { display:none; padding:32px; max-width:1400px; margin:0 auto; position:relative; z-index:1; }
+  .page.active { display:block; animation: fadeIn .3s ease; }
+  @keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+
+  /* PAGE HEADER */
+  .page-header { margin-bottom:28px; }
+  .page-title { font-family:var(--font-head); font-size:28px; font-weight:800; margin-bottom:4px;
+    background:linear-gradient(135deg, #f0f4ff 0%, #7a8aaa 100%); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+  .page-sub { font-size:14px; color:var(--muted); }
+
+  /* STAT CARDS */
+  .stats-row { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:24px; }
+  .stat-card {
+    background:var(--surface); border:1px solid var(--border); border-radius:14px;
+    padding:20px; position:relative; overflow:hidden;
+    transition:border-color .2s, transform .2s;
+  }
+  .stat-card:hover { border-color:var(--border2); transform:translateY(-2px); }
+  .stat-card::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; }
+  .stat-card.green::before { background:linear-gradient(90deg,var(--green),transparent); }
+  .stat-card.blue::before { background:linear-gradient(90deg,var(--accent),transparent); }
+  .stat-card.amber::before { background:linear-gradient(90deg,var(--amber),transparent); }
+  .stat-card.red::before { background:linear-gradient(90deg,var(--red),transparent); }
+  .stat-label { font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; margin-bottom:10px; }
+  .stat-value { font-family:var(--font-head); font-size:32px; font-weight:800; line-height:1; margin-bottom:6px; }
+  .stat-value.green { color:var(--green); }
+  .stat-value.blue { color:var(--accent); }
+  .stat-value.amber { color:var(--amber); }
+  .stat-value.red { color:var(--red); }
+  .stat-delta { font-size:12px; color:var(--muted); }
+  .stat-icon { position:absolute; top:20px; right:20px; font-size:28px; opacity:0.12; }
+
+  /* GRID LAYOUTS */
+  .grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px; }
+  .grid-3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; margin-bottom:16px; }
+  .grid-7030 { display:grid; grid-template-columns:1fr 0.43fr; gap:16px; margin-bottom:16px; }
+  .grid-3070 { display:grid; grid-template-columns:0.43fr 1fr; gap:16px; margin-bottom:16px; }
+
+  /* CARD */
+  .card {
+    background:var(--surface); border:1px solid var(--border); border-radius:14px;
+    padding:22px; margin-bottom:16px;
+  }
+  .card-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; }
+  .card-title { font-family:var(--font-head); font-size:15px; font-weight:700; }
+  .card-action { font-size:12px; color:var(--accent); cursor:pointer; }
+
+  /* BADGE */
+  .badge { display:inline-block; font-size:11px; font-weight:600; padding:3px 10px; border-radius:20px; letter-spacing:.04em; }
+  .badge-pass { background:rgba(34,211,160,0.12); color:var(--green); border:1px solid rgba(34,211,160,0.2); }
+  .badge-fail { background:rgba(244,63,94,0.12); color:var(--red); border:1px solid rgba(244,63,94,0.2); }
+  .badge-warn { background:rgba(245,158,11,0.12); color:var(--amber); border:1px solid rgba(245,158,11,0.2); }
+  .badge-run  { background:rgba(79,142,247,0.12); color:var(--accent); border:1px solid rgba(79,142,247,0.2); }
+
+  /* PROGRESS BAR */
+  .progress-row { display:flex; align-items:center; gap:10px; margin-bottom:12px; }
+  .progress-label { font-size:13px; min-width:160px; color:var(--text); }
+  .progress-bar { flex:1; height:6px; background:var(--surface2); border-radius:3px; overflow:hidden; }
+  .progress-fill { height:100%; border-radius:3px; transition:width 1s ease; }
+  .progress-pct { font-family:var(--font-mono); font-size:12px; color:var(--muted); min-width:40px; text-align:right; }
+
+  /* TABLE */
+  table { width:100%; border-collapse:collapse; }
+  th { font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.08em;
+    padding:0 12px 12px; text-align:left; font-weight:500; border-bottom:1px solid var(--border); }
+  td { padding:12px; font-size:13px; border-bottom:1px solid var(--border); vertical-align:middle; }
+  tr:last-child td { border-bottom:none; }
+  tr:hover td { background:rgba(255,255,255,0.02); }
+  .mono { font-family:var(--font-mono); font-size:12px; }
+  .td-name { font-weight:500; }
+  .td-muted { color:var(--muted); }
+
+  /* LOG TERMINAL */
+  .terminal {
+    background:#060b14; border:1px solid var(--border); border-radius:10px;
+    padding:16px; font-family:var(--font-mono); font-size:12px; line-height:1.8;
+    max-height:220px; overflow-y:auto;
+  }
+  .log-time { color:var(--muted); }
+  .log-info { color:var(--accent); }
+  .log-pass { color:var(--green); }
+  .log-fail { color:var(--red); }
+  .log-warn { color:var(--amber); }
+  .log-ai { color:var(--accent2); }
+
+  /* DONUT CHART */
+  .donut-wrap { display:flex; align-items:center; gap:24px; }
+  .donut-legend { display:flex; flex-direction:column; gap:10px; }
+  .legend-item { display:flex; align-items:center; gap:8px; font-size:13px; }
+  .legend-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+
+  /* FLOW DIAGRAM */
+  .flow { display:flex; align-items:center; gap:0; flex-wrap:nowrap; overflow-x:auto; padding:8px 0; }
+  .flow-step {
+    background:var(--surface2); border:1px solid var(--border); border-radius:10px;
+    padding:12px 16px; text-align:center; min-width:120px; flex-shrink:0;
+  }
+  .flow-step-icon { font-size:20px; margin-bottom:4px; }
+  .flow-step-name { font-size:12px; font-weight:600; color:var(--text); margin-bottom:2px; }
+  .flow-step-sub { font-size:10px; color:var(--muted); }
+  .flow-arrow { color:var(--muted); font-size:18px; padding:0 8px; flex-shrink:0; }
+
+  /* VALIDATION CHECKS */
+  .check-row { display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid var(--border); }
+  .check-row:last-child { border-bottom:none; }
+  .check-name { font-size:13px; font-weight:500; }
+  .check-detail { font-size:12px; color:var(--muted); }
+  .check-right { display:flex; align-items:center; gap:12px; }
+  .check-count { font-family:var(--font-mono); font-size:12px; color:var(--muted); }
+
+  /* SOURCE TARGET COMPARE */
+  .compare-grid { display:grid; grid-template-columns:1fr auto 1fr; gap:12px; align-items:center; }
+  .compare-box { background:var(--surface2); border:1px solid var(--border); border-radius:10px; padding:14px; }
+  .compare-title { font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; margin-bottom:10px; }
+  .compare-row { display:flex; justify-content:space-between; font-size:13px; margin-bottom:6px; }
+  .compare-key { color:var(--muted); }
+  .compare-val { font-family:var(--font-mono); font-size:12px; }
+  .compare-arrow-col { text-align:center; }
+  .compare-icon { font-size:24px; }
+
+  /* AI GENERATED BADGE */
+  .ai-label { display:inline-flex; align-items:center; gap:6px; font-size:11px;
+    background:rgba(124,92,252,0.1); color:var(--accent2); border:1px solid rgba(124,92,252,0.2);
+    padding:3px 10px; border-radius:20px; }
+  .ai-dot { width:6px; height:6px; border-radius:50%; background:var(--accent2); animation:pulse 1.5s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+  /* CHART BARS */
+  .bar-chart { display:flex; align-items:flex-end; gap:10px; height:120px; padding:0 4px; }
+  .bar-col { flex:1; display:flex; flex-direction:column; align-items:center; gap:6px; }
+  .bar { width:100%; border-radius:4px 4px 0 0; min-height:4px; transition:height 1s ease; }
+  .bar-lbl { font-size:10px; color:var(--muted); }
+
+  /* FOLDER TREE */
+  .ftree { font-family:var(--font-mono); font-size:12px; line-height:2; }
+  .ftree .fd { color:var(--accent); }
+  .ftree .ff { color:var(--text); }
+  .ftree .fc { color:var(--muted); margin-left:8px; font-size:11px; }
+  .ftree .tool { display:inline-block; font-size:10px; padding:1px 6px; border-radius:8px; margin-left:6px; vertical-align:middle; }
+  .t-spark { background:rgba(245,158,11,0.15); color:var(--amber); }
+  .t-ai { background:rgba(124,92,252,0.15); color:var(--accent2); }
+  .t-hive { background:rgba(6,182,212,0.15); color:var(--teal); }
+  .t-azure { background:rgba(79,142,247,0.15); color:var(--accent); }
+  .t-oracle { background:rgba(34,211,160,0.15); color:var(--green); }
+  .t-dbt { background:rgba(34,211,160,0.15); color:var(--green); }
+  .t-af { background:rgba(245,158,11,0.15); color:var(--amber); }
+
+  /* CODE VIEWER */
+  .code-file-tabs { display:flex; gap:0; border-bottom:1px solid var(--border); margin-bottom:0; overflow-x:auto; }
+  .code-ftab { font-family:var(--font-mono); font-size:12px; padding:8px 16px; cursor:pointer;
+    border:none; background:transparent; color:var(--muted); border-right:1px solid var(--border);
+    white-space:nowrap; transition:all .15s; }
+  .code-ftab.active { background:var(--surface2); color:var(--text); }
+  .code-view { background:#060b14; border-radius:0 0 10px 10px; padding:18px;
+    font-family:var(--font-mono); font-size:12px; line-height:1.9; overflow-x:auto; max-height:380px; overflow-y:auto; }
+  .kw { color:#7c5cfc; }
+  .fn { color:#22d3a0; }
+  .st { color:#f97316; }
+  .cm { color:#4a5568; }
+  .num { color:#f59e0b; }
+  .cls { color:#4f8ef7; }
+  .dec { color:#f43f5e; }
+
+  /* SCROLLBAR */
+  ::-webkit-scrollbar { width:4px; height:4px; }
+  ::-webkit-scrollbar-track { background:transparent; }
+  ::-webkit-scrollbar-thumb { background:var(--border2); border-radius:2px; }
+
+  /* RUN BUTTON */
+  .btn { display:inline-flex; align-items:center; gap:8px; padding:8px 18px; border-radius:8px;
+    font-size:13px; font-weight:600; cursor:pointer; border:none; transition:all .2s; }
+  .btn-primary { background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#fff; }
+  .btn-primary:hover { opacity:.85; transform:translateY(-1px); }
+  .btn-ghost { background:var(--surface2); color:var(--text); border:1px solid var(--border2); }
+  .btn-ghost:hover { border-color:var(--accent); }
+
+  /* TIMELINE */
+  .timeline { position:relative; padding-left:24px; }
+  .timeline::before { content:''; position:absolute; left:7px; top:0; bottom:0; width:1px; background:var(--border); }
+  .tl-item { position:relative; margin-bottom:18px; }
+  .tl-dot { position:absolute; left:-21px; top:4px; width:10px; height:10px; border-radius:50%; border:2px solid var(--surface); }
+  .tl-time { font-size:11px; color:var(--muted); font-family:var(--font-mono); margin-bottom:2px; }
+  .tl-text { font-size:13px; color:var(--text); }
+
+  /* RESPONSIVE */
+  @media(max-width:900px) {
+    .stats-row { grid-template-columns:1fr 1fr; }
+    .grid-2,.grid-3,.grid-7030,.grid-3070 { grid-template-columns:1fr; }
+    .flow { flex-direction:column; }
+    .flow-arrow { transform:rotate(90deg); }
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-brand">⬡ DataValid AI</div>
+  <div class="nav-tabs">
+    <button class="nav-tab active" onclick="showPage('overview')">Overview</button>
+    <button class="nav-tab" onclick="showPage('validation')">Validation</button>
+    <button class="nav-tab" onclick="showPage('schema')">Schema</button>
+    <button class="nav-tab" onclick="showPage('code')">Code</button>
+    <button class="nav-tab" onclick="showPage('architecture')">Architecture</button>
+  </div>
+  <div class="nav-badge">● LIVE — Last run: 08:42 AM</div>
+</nav>
+
+<!-- ═══════════════════════════════════════════════════════════
+     PAGE 1: OVERVIEW
+════════════════════════════════════════════════════════════════ -->
+<div class="page active" id="page-overview">
+  <div class="page-header">
+    <div class="page-title">AI-Powered Data Validation Framework</div>
+    <div class="page-sub">Enterprise validation across Oracle → Hive → Azure Data Lake · Client Presentation Dashboard</div>
+  </div>
+
+  <!-- STAT CARDS -->
+  <div class="stats-row">
+    <div class="stat-card green">
+      <div class="stat-icon">✓</div>
+      <div class="stat-label">Tests Passed</div>
+      <div class="stat-value green">1,847</div>
+      <div class="stat-delta">↑ 98.3% pass rate today</div>
+    </div>
+    <div class="stat-card red">
+      <div class="stat-icon">✕</div>
+      <div class="stat-label">Tests Failed</div>
+      <div class="stat-value red">32</div>
+      <div class="stat-delta">↓ 3 critical, 29 warnings</div>
+    </div>
+    <div class="stat-card blue">
+      <div class="stat-icon">⚡</div>
+      <div class="stat-label">Rows Validated</div>
+      <div class="stat-value blue">14.2M</div>
+      <div class="stat-delta">Across 6 source tables</div>
+    </div>
+    <div class="stat-card amber">
+      <div class="stat-icon">🤖</div>
+      <div class="stat-label">AI Test Cases Generated</div>
+      <div class="stat-value amber">284</div>
+      <div class="stat-delta">Claude API · 12s avg gen time</div>
+    </div>
+  </div>
+
+  <div class="grid-7030">
+    <!-- VALIDATION BY CHECK TYPE -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Validation Results by Check Type</span>
+        <span class="ai-label"><span class="ai-dot"></span>AI-generated tests</span>
+      </div>
+      <div class="progress-row"><div class="progress-label">Row Count Match</div><div class="progress-bar"><div class="progress-fill" style="width:100%;background:var(--green)"></div></div><div class="progress-pct" style="color:var(--green)">100%</div></div>
+      <div class="progress-row"><div class="progress-label">Schema Consistency</div><div class="progress-bar"><div class="progress-fill" style="width:94%;background:var(--green)"></div></div><div class="progress-pct" style="color:var(--green)">94%</div></div>
+      <div class="progress-row"><div class="progress-label">Null Value Check</div><div class="progress-bar"><div class="progress-fill" style="width:97%;background:var(--green)"></div></div><div class="progress-pct" style="color:var(--green)">97%</div></div>
+      <div class="progress-row"><div class="progress-label">Duplicate Records</div><div class="progress-bar"><div class="progress-fill" style="width:89%;background:var(--amber)"></div></div><div class="progress-pct" style="color:var(--amber)">89%</div></div>
+      <div class="progress-row"><div class="progress-label">Data Type Mismatch</div><div class="progress-bar"><div class="progress-fill" style="width:82%;background:var(--amber)"></div></div><div class="progress-pct" style="color:var(--amber)">82%</div></div>
+      <div class="progress-row"><div class="progress-label">PK Integrity</div><div class="progress-bar"><div class="progress-fill" style="width:74%;background:var(--red)"></div></div><div class="progress-pct" style="color:var(--red)">74%</div></div>
+      <div class="progress-row"><div class="progress-label">Business Rule Check</div><div class="progress-bar"><div class="progress-fill" style="width:91%;background:var(--green)"></div></div><div class="progress-pct" style="color:var(--green)">91%</div></div>
+    </div>
+
+    <!-- DONUT PASS/FAIL -->
+    <div class="card">
+      <div class="card-header"><span class="card-title">Overall Status</span></div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:16px;">
+        <svg width="140" height="140" viewBox="0 0 140 140">
+          <circle cx="70" cy="70" r="55" fill="none" stroke="var(--surface2)" stroke-width="18"/>
+          <circle cx="70" cy="70" r="55" fill="none" stroke="var(--green)" stroke-width="18"
+            stroke-dasharray="344 346" stroke-dashoffset="86" stroke-linecap="round" transform="rotate(-90 70 70)"/>
+          <circle cx="70" cy="70" r="55" fill="none" stroke="var(--red)" stroke-width="18"
+            stroke-dasharray="18 346" stroke-dashoffset="-258" stroke-linecap="round" transform="rotate(-90 70 70)"/>
+          <circle cx="70" cy="70" r="55" fill="none" stroke="var(--amber)" stroke-width="18"
+            stroke-dasharray="15 346" stroke-dashoffset="-276" stroke-linecap="round" transform="rotate(-90 70 70)"/>
+          <text x="70" y="64" text-anchor="middle" font-family="Syne,sans-serif" font-size="22" font-weight="800" fill="var(--green)">98.3%</text>
+          <text x="70" y="82" text-anchor="middle" font-family="DM Sans,sans-serif" font-size="11" fill="var(--muted)">Pass Rate</text>
+        </svg>
+        <div class="donut-legend">
+          <div class="legend-item"><div class="legend-dot" style="background:var(--green)"></div>Passed — 1,847</div>
+          <div class="legend-item"><div class="legend-dot" style="background:var(--red)"></div>Failed — 32</div>
+          <div class="legend-item"><div class="legend-dot" style="background:var(--amber)"></div>Warnings — 8</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PIPELINE FLOW -->
+  <div class="card">
+    <div class="card-header"><span class="card-title">Validation Pipeline Flow</span><span class="badge badge-run">Airflow DAG</span></div>
+    <div class="flow">
+      <div class="flow-step" style="border-color:rgba(6,182,212,0.3)">
+        <div class="flow-step-icon">🗄️</div>
+        <div class="flow-step-name">Source Read</div>
+        <div class="flow-step-sub">Oracle / Hive</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step" style="border-color:rgba(124,92,252,0.3)">
+        <div class="flow-step-icon">🤖</div>
+        <div class="flow-step-name">AI Test Gen</div>
+        <div class="flow-step-sub">Claude API</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step" style="border-color:rgba(245,158,11,0.3)">
+        <div class="flow-step-icon">⚡</div>
+        <div class="flow-step-name">Spark Execute</div>
+        <div class="flow-step-sub">PySpark Jobs</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step" style="border-color:rgba(79,142,247,0.3)">
+        <div class="flow-step-icon">🔍</div>
+        <div class="flow-step-name">Validate</div>
+        <div class="flow-step-sub">7 Check Types</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step" style="border-color:rgba(79,142,247,0.3)">
+        <div class="flow-step-icon">☁️</div>
+        <div class="flow-step-name">Target Load</div>
+        <div class="flow-step-sub">Azure ADLS</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step" style="border-color:rgba(34,211,160,0.3)">
+        <div class="flow-step-icon">📊</div>
+        <div class="flow-step-name">Report</div>
+        <div class="flow-step-sub">Pass/Fail</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RECENT RUNS TABLE -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Recent Validation Runs</span>
+      <button class="btn btn-primary" onclick="showPage('validation')">Run New ▶</button>
+    </div>
+    <table>
+      <thead><tr>
+        <th>Run ID</th><th>Source Table</th><th>Target System</th><th>Rows</th><th>Tests</th><th>Pass</th><th>Fail</th><th>Status</th><th>Duration</th>
+      </tr></thead>
+      <tbody>
+        <tr><td class="mono">RUN-2041</td><td class="td-name">CUST_MASTER</td><td>Azure ADLS</td><td class="mono">4,821,003</td><td class="mono">48</td><td class="mono" style="color:var(--green)">47</td><td class="mono" style="color:var(--red)">1</td><td><span class="badge badge-warn">WARNING</span></td><td class="td-muted mono">2m 14s</td></tr>
+        <tr><td class="mono">RUN-2040</td><td class="td-name">ORDERS_FACT</td><td>Hive DW</td><td class="mono">9,200,441</td><td class="mono">62</td><td class="mono" style="color:var(--green)">62</td><td class="mono" style="color:var(--green)">0</td><td><span class="badge badge-pass">PASS</span></td><td class="td-muted mono">5m 31s</td></tr>
+        <tr><td class="mono">RUN-2039</td><td class="td-name">PRODUCT_DIM</td><td>Azure ADLS</td><td class="mono">182,300</td><td class="mono">35</td><td class="mono" style="color:var(--green)">29</td><td class="mono" style="color:var(--red)">6</td><td><span class="badge badge-fail">FAIL</span></td><td class="td-muted mono">45s</td></tr>
+        <tr><td class="mono">RUN-2038</td><td class="td-name">EMPLOYEE_HR</td><td>Oracle→Hive</td><td class="mono">78,200</td><td class="mono">28</td><td class="mono" style="color:var(--green)">28</td><td class="mono" style="color:var(--green)">0</td><td><span class="badge badge-pass">PASS</span></td><td class="td-muted mono">28s</td></tr>
+        <tr><td class="mono">RUN-2037</td><td class="td-name">FINANCE_TXN</td><td>Azure ADLS</td><td class="mono">2,100,882</td><td class="mono">55</td><td class="mono" style="color:var(--green)">53</td><td class="mono" style="color:var(--red)">2</td><td><span class="badge badge-warn">WARNING</span></td><td class="td-muted mono">3m 02s</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     PAGE 2: VALIDATION DETAIL
+════════════════════════════════════════════════════════════════ -->
+<div class="page" id="page-validation">
+  <div class="page-header">
+    <div class="page-title">Validation Detail — RUN-2041</div>
+    <div class="page-sub">Table: CUST_MASTER · Source: Oracle · Target: Azure ADLS Gen2 · 4,821,003 rows</div>
+  </div>
+
+  <!-- SOURCE vs TARGET COMPARE -->
+  <div class="card">
+    <div class="card-header"><span class="card-title">Source vs Target Comparison</span><span class="badge badge-warn">1 Issue Found</span></div>
+    <div class="compare-grid">
+      <div class="compare-box">
+        <div class="compare-title" style="color:var(--teal)">◼ Source — Oracle DB</div>
+        <div class="compare-row"><span class="compare-key">Table</span><span class="compare-val">CUST_MASTER</span></div>
+        <div class="compare-row"><span class="compare-key">Row Count</span><span class="compare-val" style="color:var(--green)">4,821,003</span></div>
+        <div class="compare-row"><span class="compare-key">Columns</span><span class="compare-val">24</span></div>
+        <div class="compare-row"><span class="compare-key">Nulls (EMAIL)</span><span class="compare-val">1,204</span></div>
+        <div class="compare-row"><span class="compare-key">Duplicates (PK)</span><span class="compare-val" style="color:var(--green)">0</span></div>
+        <div class="compare-row"><span class="compare-key">Last Updated</span><span class="compare-val">2026-05-15</span></div>
+      </div>
+      <div class="compare-arrow-col">
+        <div class="compare-icon" style="color:var(--muted)">⇄</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:8px">AI diff</div>
+      </div>
+      <div class="compare-box">
+        <div class="compare-title" style="color:var(--accent)">◼ Target — Azure ADLS</div>
+        <div class="compare-row"><span class="compare-key">Table</span><span class="compare-val">cust_master_delta</span></div>
+        <div class="compare-row"><span class="compare-key">Row Count</span><span class="compare-val" style="color:var(--green)">4,821,003</span></div>
+        <div class="compare-row"><span class="compare-key">Columns</span><span class="compare-val">24</span></div>
+        <div class="compare-row"><span class="compare-key">Nulls (EMAIL)</span><span class="compare-val">1,204</span></div>
+        <div class="compare-row"><span class="compare-key">Duplicates (PK)</span><span class="compare-val" style="color:var(--red)">7 ⚠</span></div>
+        <div class="compare-row"><span class="compare-key">Last Updated</span><span class="compare-val">2026-05-15</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <!-- VALIDATION CHECKS -->
+    <div class="card">
+      <div class="card-header"><span class="card-title">Individual Check Results</span></div>
+      <div class="check-row"><div><div class="check-name">Row Count Validation</div><div class="check-detail">Source = Target = 4,821,003</div></div><div class="check-right"><span class="check-count">1/1</span><span class="badge badge-pass">PASS</span></div></div>
+      <div class="check-row"><div><div class="check-name">Schema Column Match</div><div class="check-detail">All 24 columns match</div></div><div class="check-right"><span class="check-count">24/24</span><span class="badge badge-pass">PASS</span></div></div>
+      <div class="check-row"><div><div class="check-name">Null Value — CUST_ID</div><div class="check-detail">No nulls in primary key column</div></div><div class="check-right"><span class="check-count">0 nulls</span><span class="badge badge-pass">PASS</span></div></div>
+      <div class="check-row"><div><div class="check-name">Null Value — EMAIL</div><div class="check-detail">1,204 nulls (0.025%) — within threshold</div></div><div class="check-right"><span class="check-count">1,204</span><span class="badge badge-warn">WARN</span></div></div>
+      <div class="check-row"><div><div class="check-name">Duplicate PK (Target)</div><div class="check-detail">7 duplicate CUST_IDs found in ADLS</div></div><div class="check-right"><span class="check-count">7 dupes</span><span class="badge badge-fail">FAIL</span></div></div>
+      <div class="check-row"><div><div class="check-name">Data Type — DOB</div><div class="check-detail">DATE → STRING coercion detected</div></div><div class="check-right"><span class="check-count">type diff</span><span class="badge badge-warn">WARN</span></div></div>
+      <div class="check-row"><div><div class="check-name">Business Rule — AGE≥18</div><div class="check-detail">All customer age records valid</div></div><div class="check-right"><span class="check-count">clean</span><span class="badge badge-pass">PASS</span></div></div>
+    </div>
+
+    <!-- EXECUTION LOG -->
+    <div class="card">
+      <div class="card-header"><span class="card-title">Execution Log</span><span class="badge badge-run">Live</span></div>
+      <div class="terminal">
+        <div><span class="log-time">[08:40:01]</span> <span class="log-info">INFO</span>  Airflow DAG triggered: validation_dag_RUN2041</div>
+        <div><span class="log-time">[08:40:02]</span> <span class="log-info">INFO</span>  Connecting to Oracle: PROD_DB@10.0.1.22</div>
+        <div><span class="log-time">[08:40:04]</span> <span class="log-pass">OK  </span>  Schema read: CUST_MASTER (24 cols)</div>
+        <div><span class="log-time">[08:40:05]</span> <span class="log-ai"> AI </span>  Claude API: generating test cases from schema diff...</div>
+        <div><span class="log-time">[08:40:17]</span> <span class="log-ai"> AI </span>  Generated 48 test cases in 12.3s</div>
+        <div><span class="log-time">[08:40:18]</span> <span class="log-info">INFO</span>  PySpark job started on cluster VALIDATION-CLUSTER-01</div>
+        <div><span class="log-time">[08:40:22]</span> <span class="log-pass">OK  </span>  Row count: source=4821003 target=4821003 [PASS]</div>
+        <div><span class="log-time">[08:40:45]</span> <span class="log-pass">OK  </span>  Null check CUST_ID: 0 nulls [PASS]</div>
+        <div><span class="log-time">[08:41:02]</span> <span class="log-warn">WARN</span>  Null check EMAIL: 1204 nulls (threshold 0.05%) [WARN]</div>
+        <div><span class="log-time">[08:41:15]</span> <span class="log-fail">FAIL</span>  Duplicate check target: 7 duplicate CUST_IDs detected!</div>
+        <div><span class="log-time">[08:41:28]</span> <span class="log-warn">WARN</span>  Data type DOB: DATE→STRING coercion in ADLS partition</div>
+        <div><span class="log-time">[08:42:00]</span> <span class="log-pass">OK  </span>  Business rule AGE≥18: 0 violations [PASS]</div>
+        <div><span class="log-time">[08:42:14]</span> <span class="log-info">INFO</span>  Report written: /reports/RUN-2041_CUST_MASTER.json</div>
+        <div><span class="log-time">[08:42:14]</span> <span class="log-warn">WARN</span>  Run complete: 47 PASS, 1 FAIL → Status: WARNING</div>
+      </div>
+
+      <div style="margin-top:16px;">
+        <div class="card-header" style="margin-bottom:12px;"><span class="card-title" style="font-size:13px">Run Timeline</span></div>
+        <div class="timeline">
+          <div class="tl-item"><div class="tl-dot" style="background:var(--accent)"></div><div class="tl-time">08:40:01</div><div class="tl-text">DAG triggered by Airflow scheduler</div></div>
+          <div class="tl-item"><div class="tl-dot" style="background:var(--accent2)"></div><div class="tl-time">08:40:05</div><div class="tl-text">Claude API generated 48 AI test cases</div></div>
+          <div class="tl-item"><div class="tl-dot" style="background:var(--amber)"></div><div class="tl-time">08:40:18</div><div class="tl-text">PySpark validation cluster started</div></div>
+          <div class="tl-item"><div class="tl-dot" style="background:var(--red)"></div><div class="tl-time">08:41:15</div><div class="tl-text">Duplicate PK failure detected in target</div></div>
+          <div class="tl-item"><div class="tl-dot" style="background:var(--green)"></div><div class="tl-time">08:42:14</div><div class="tl-text">Validation report generated &amp; stored</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     PAGE 3: SCHEMA COMPARISON
+════════════════════════════════════════════════════════════════ -->
+<div class="page" id="page-schema">
+  <div class="page-header">
+    <div class="page-title">Schema Analysis</div>
+    <div class="page-sub">Auto-detected schema changes across all 6 monitored tables</div>
+  </div>
+
+  <!-- WEEKLY BAR CHART -->
+  <div class="card">
+    <div class="card-header"><span class="card-title">Daily Validation Volume (7 days)</span></div>
+    <div style="padding:8px 0 4px">
+      <div style="display:flex;align-items:flex-end;gap:10px;height:120px;padding:0 4px">
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px"><div style="width:100%;border-radius:4px 4px 0 0;height:60px;background:linear-gradient(180deg,var(--accent),rgba(79,142,247,0.4))"></div><div style="font-size:10px;color:var(--muted)">Mon</div></div>
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px"><div style="width:100%;border-radius:4px 4px 0 0;height:90px;background:linear-gradient(180deg,var(--accent),rgba(79,142,247,0.4))"></div><div style="font-size:10px;color:var(--muted)">Tue</div></div>
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px"><div style="width:100%;border-radius:4px 4px 0 0;height:75px;background:linear-gradient(180deg,var(--accent),rgba(79,142,247,0.4))"></div><div style="font-size:10px;color:var(--muted)">Wed</div></div>
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px"><div style="width:100%;border-radius:4px 4px 0 0;height:110px;background:linear-gradient(180deg,var(--amber),rgba(245,158,11,0.4))"></div><div style="font-size:10px;color:var(--muted)">Thu</div></div>
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px"><div style="width:100%;border-radius:4px 4px 0 0;height:80px;background:linear-gradient(180deg,var(--accent),rgba(79,142,247,0.4))"></div><div style="font-size:10px;color:var(--muted)">Fri</div></div>
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px"><div style="width:100%;border-radius:4px 4px 0 0;height:45px;background:linear-gradient(180deg,var(--green),rgba(34,211,160,0.4))"></div><div style="font-size:10px;color:var(--muted)">Sat</div></div>
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px"><div style="width:100%;border-radius:4px 4px 0 0;height:55px;background:linear-gradient(180deg,var(--green),rgba(34,211,160,0.4))"></div><div style="font-size:10px;color:var(--muted)">Sun</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCHEMA TABLE -->
+  <div class="card">
+    <div class="card-header"><span class="card-title">Schema Diff — CUST_MASTER (Oracle → ADLS)</span><span class="ai-label"><span class="ai-dot"></span>AI-detected changes</span></div>
+    <table>
+      <thead><tr><th>Column</th><th>Source Type (Oracle)</th><th>Target Type (ADLS)</th><th>Nullable Src</th><th>Nullable Tgt</th><th>Change</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td class="mono td-name">CUST_ID</td><td class="mono">NUMBER(10)</td><td class="mono">BIGINT</td><td>NO</td><td>NO</td><td class="td-muted">Type cast</td><td><span class="badge badge-pass">OK</span></td></tr>
+        <tr><td class="mono td-name">FIRST_NAME</td><td class="mono">VARCHAR2(50)</td><td class="mono">STRING</td><td>NO</td><td>NO</td><td class="td-muted">Type cast</td><td><span class="badge badge-pass">OK</span></td></tr>
+        <tr><td class="mono td-name">EMAIL</td><td class="mono">VARCHAR2(100)</td><td class="mono">STRING</td><td>YES</td><td>YES</td><td class="td-muted">None</td><td><span class="badge badge-pass">OK</span></td></tr>
+        <tr><td class="mono td-name">DOB</td><td class="mono">DATE</td><td class="mono" style="color:var(--amber)">STRING ⚠</td><td>YES</td><td>YES</td><td class="td-muted" style="color:var(--amber)">Type mismatch</td><td><span class="badge badge-warn">WARN</span></td></tr>
+        <tr><td class="mono td-name">CREATED_AT</td><td class="mono">TIMESTAMP</td><td class="mono">TIMESTAMP</td><td>NO</td><td>NO</td><td class="td-muted">None</td><td><span class="badge badge-pass">OK</span></td></tr>
+        <tr><td class="mono td-name">PHONE</td><td class="mono">VARCHAR2(20)</td><td class="mono">STRING</td><td>YES</td><td>NO</td><td class="td-muted" style="color:var(--red)">Nullable change</td><td><span class="badge badge-fail">FAIL</span></td></tr>
+        <tr><td class="mono td-name">COUNTRY_CD</td><td class="mono">CHAR(2)</td><td class="mono">STRING</td><td>NO</td><td>NO</td><td class="td-muted">Type cast</td><td><span class="badge badge-pass">OK</span></td></tr>
+        <tr><td class="mono td-name">LOYALTY_TIER</td><td class="mono td-muted" colspan="2" style="color:var(--red)">← Column missing in target (ADLS)</td><td>—</td><td>—</td><td class="td-muted" style="color:var(--red)">Missing col</td><td><span class="badge badge-fail">FAIL</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- AI GENERATED TEST CASES -->
+  <div class="card">
+    <div class="card-header"><span class="card-title">AI-Generated Test Cases — Sample</span><span class="ai-label"><span class="ai-dot"></span>Claude API</span></div>
+    <table>
+      <thead><tr><th>#</th><th>Test Name</th><th>Check Type</th><th>Expression</th><th>Expected</th><th>Result</th></tr></thead>
+      <tbody>
+        <tr><td class="mono td-muted">TC-001</td><td>PK uniqueness source</td><td>PK Integrity</td><td class="mono">COUNT(CUST_ID) = COUNT(DISTINCT CUST_ID)</td><td class="mono">TRUE</td><td><span class="badge badge-pass">PASS</span></td></tr>
+        <tr><td class="mono td-muted">TC-002</td><td>PK uniqueness target</td><td>PK Integrity</td><td class="mono">COUNT(CUST_ID) = COUNT(DISTINCT CUST_ID)</td><td class="mono">TRUE</td><td><span class="badge badge-fail">FAIL</span></td></tr>
+        <tr><td class="mono td-muted">TC-003</td><td>Email null rate &lt; 5%</td><td>Null Check</td><td class="mono">NULL_PCT(EMAIL) &lt; 0.05</td><td class="mono">TRUE</td><td><span class="badge badge-pass">PASS</span></td></tr>
+        <tr><td class="mono td-muted">TC-004</td><td>DOB type consistency</td><td>Data Type</td><td class="mono">DTYPE(DOB) == DTYPE(dob)</td><td class="mono">TRUE</td><td><span class="badge badge-warn">WARN</span></td></tr>
+        <tr><td class="mono td-muted">TC-005</td><td>Row count delta &lt; 0.1%</td><td>Row Count</td><td class="mono">ABS(SRC_CNT - TGT_CNT) / SRC_CNT &lt; 0.001</td><td class="mono">TRUE</td><td><span class="badge badge-pass">PASS</span></td></tr>
+        <tr><td class="mono td-muted">TC-006</td><td>Business rule: AGE ≥ 18</td><td>Business Rule</td><td class="mono">MIN(YEAR(NOW)-YEAR(DOB)) &gt;= 18</td><td class="mono">TRUE</td><td><span class="badge badge-pass">PASS</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     PAGE 4: CODE STRUCTURE
+════════════════════════════════════════════════════════════════ -->
+<div class="page" id="page-code">
+  <div class="page-header">
+    <div class="page-title">Code Structure</div>
+    <div class="page-sub">Complete source code for all validation engine modules</div>
+  </div>
+
+  <div class="grid-3070">
+    <!-- FOLDER TREE -->
+    <div class="card">
+      <div class="card-header"><span class="card-title">Folder Structure</span></div>
+      <div class="ftree">
+<span class="fd">ai-data-validation/</span><br>
+├── <span class="fd">.claude/</span><br>
+├── <span class="fd">.codex/</span><br>
+├── <span class="fd">.envire/</span><br>
+├── <span class="fd">frontend/</span><br>
+│&nbsp;&nbsp; └── <span class="fd">src/</span><br>
+│&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ├── <span class="ff">ValidationReport</span><br>
+│&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ├── <span class="ff">SchemaCompare</span><br>
+│&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; └── <span class="ff">Dashboard</span><br>
+├── <span class="fd">backend/</span><br>
+│&nbsp;&nbsp; ├── <span class="fd">api/</span><br>
+│&nbsp;&nbsp; │&nbsp;&nbsp; ├── <span class="ff">routes.py</span><br>
+│&nbsp;&nbsp; │&nbsp;&nbsp; └── <span class="ff">models.py</span><br>
+│&nbsp;&nbsp; ├── <span class="fd">validation_engine/</span><br>
+│&nbsp;&nbsp; │&nbsp;&nbsp; ├── <span class="ff">schema_reader.py</span><span class="tool t-spark">Spark</span><br>
+│&nbsp;&nbsp; │&nbsp;&nbsp; ├── <span class="ff">test_generator.py</span><span class="tool t-ai">AI</span><br>
+│&nbsp;&nbsp; │&nbsp;&nbsp; ├── <span class="ff">row_count.py</span><span class="tool t-spark">Spark</span><br>
+│&nbsp;&nbsp; │&nbsp;&nbsp; ├── <span class="ff">null_checker.py</span><br>
+│&nbsp;&nbsp; │&nbsp;&nbsp; ├── <span class="ff">duplicate_finder.py</span><br>
+│&nbsp;&nbsp; │&nbsp;&nbsp; ├── <span class="ff">pk_integrity.py</span><br>
+│&nbsp;&nbsp; │&nbsp;&nbsp; └── <span class="ff">dtype_validator.py</span><br>
+│&nbsp;&nbsp; ├── <span class="fd">connectors/</span><br>
+│&nbsp;&nbsp; │&nbsp;&nbsp; ├── <span class="ff">oracle_conn.py</span><span class="tool t-oracle">Oracle</span><br>
+│&nbsp;&nbsp; │&nbsp;&nbsp; ├── <span class="ff">hive_conn.py</span><span class="tool t-hive">Hive</span><br>
+│&nbsp;&nbsp; │&nbsp;&nbsp; └── <span class="ff">azure_conn.py</span><span class="tool t-azure">ADLS</span><br>
+│&nbsp;&nbsp; └── <span class="fd">report_engine/</span><br>
+│&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; └── <span class="ff">report_builder.py</span><br>
+├── <span class="fd">data_pipelines/</span><br>
+│&nbsp;&nbsp; ├── <span class="ff">validation_dag.py</span><span class="tool t-af">Airflow</span><br>
+│&nbsp;&nbsp; └── <span class="ff">metadata_sync.py</span><span class="tool t-dbt">dbt</span><br>
+├── <span class="fd">tests/</span><br>
+├── <span class="ff">CLAUDE.md</span><br>
+├── <span class="ff">Dockerfile</span><br>
+├── <span class="ff">nginx.conf</span><br>
+├── <span class="ff">openapi.yaml</span><br>
+└── <span class="ff">README.md</span>
+      </div>
+    </div>
+
+    <!-- CODE VIEWER -->
+    <div class="card" style="padding:0;overflow:hidden">
+      <div style="padding:16px 22px 0;"><div class="card-title" style="font-family:var(--font-head);font-size:15px;font-weight:700;padding-bottom:14px">Module Code</div></div>
+      <div class="code-file-tabs">
+        <button class="code-ftab active" onclick="showCode('gen')">test_generator.py</button>
+        <button class="code-ftab" onclick="showCode('oracle')">oracle_conn.py</button>
+        <button class="code-ftab" onclick="showCode('hive')">hive_conn.py</button>
+        <button class="code-ftab" onclick="showCode('azure')">azure_conn.py</button>
+        <button class="code-ftab" onclick="showCode('spark')">row_count.py</button>
+        <button class="code-ftab" onclick="showCode('dag')">validation_dag.py</button>
+        <button class="code-ftab" onclick="showCode('report')">report_builder.py</button>
+        <button class="code-ftab" onclick="showCode('api')">routes.py</button>
+      </div>
+
+      <div class="code-view" id="code-gen">
+<span class="cm"># validation_engine/test_generator.py</span><br>
+<span class="cm"># AI-powered test case generation using Claude API</span><br>
+<br>
+<span class="kw">import</span> anthropic<br>
+<span class="kw">import</span> json<br>
+<span class="kw">from</span> dataclasses <span class="kw">import</span> dataclass<br>
+<span class="kw">from</span> typing <span class="kw">import</span> List, Dict<br>
+<span class="kw">from</span> .schema_reader <span class="kw">import</span> SchemaReader<br>
+<br>
+@dataclass<br>
+<span class="kw">class</span> <span class="cls">TestCase</span>:<br>
+&nbsp;&nbsp;id: str<br>
+&nbsp;&nbsp;name: str<br>
+&nbsp;&nbsp;check_type: str<br>
+&nbsp;&nbsp;expression: str<br>
+&nbsp;&nbsp;expected: str<br>
+<br>
+<span class="kw">class</span> <span class="cls">TestCaseGenerator</span>:<br>
+&nbsp;&nbsp;<span class="cm">"""Uses Claude API to dynamically generate validation test cases</span><br>
+&nbsp;&nbsp;<span class="cm">based on schema comparison between source and target."""</span><br>
+<br>
+&nbsp;&nbsp;<span class="kw">def</span> <span class="fn">__init__</span>(self, source_config: dict, target_config: dict):<br>
+&nbsp;&nbsp;&nbsp;&nbsp;self.client = anthropic.Anthropic()<br>
+&nbsp;&nbsp;&nbsp;&nbsp;self.source = SchemaReader(source_config)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;self.target = SchemaReader(target_config)<br>
+<br>
+&nbsp;&nbsp;<span class="kw">def</span> <span class="fn">generate</span>(self) -> List[TestCase]:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;src_schema = self.source.read()<br>
+&nbsp;&nbsp;&nbsp;&nbsp;tgt_schema = self.target.read()<br>
+&nbsp;&nbsp;&nbsp;&nbsp;schema_diff = self._compute_diff(src_schema, tgt_schema)<br>
+<br>
+&nbsp;&nbsp;&nbsp;&nbsp;prompt = f<span class="st">"""You are a data quality expert.</span><br>
+<span class="st">&nbsp;&nbsp;&nbsp;&nbsp;Given this schema diff between source and target:</span><br>
+<span class="st">&nbsp;&nbsp;&nbsp;&nbsp;{json.dumps(schema_diff, indent=2)}</span><br>
+<span class="st">&nbsp;&nbsp;&nbsp;&nbsp;Generate comprehensive validation test cases.</span><br>
+<span class="st">&nbsp;&nbsp;&nbsp;&nbsp;Return ONLY a JSON array of test objects with:</span><br>
+<span class="st">&nbsp;&nbsp;&nbsp;&nbsp;id, name, check_type, expression, expected"""</span><br>
+<br>
+&nbsp;&nbsp;&nbsp;&nbsp;resp = self.client.messages.create(<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;model=<span class="st">"claude-sonnet-4-20250514"</span>,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;max_tokens=<span class="num">2000</span>,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: prompt}]<br>
+&nbsp;&nbsp;&nbsp;&nbsp;)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;raw = json.loads(resp.content[<span class="num">0</span>].text)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">return</span> [TestCase(**tc) <span class="kw">for</span> tc <span class="kw">in</span> raw]<br>
+<br>
+&nbsp;&nbsp;<span class="kw">def</span> <span class="fn">_compute_diff</span>(self, src, tgt) -> dict:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;added = [c <span class="kw">for</span> c <span class="kw">in</span> src <span class="kw">if</span> c <span class="kw">not in</span> tgt]<br>
+&nbsp;&nbsp;&nbsp;&nbsp;removed = [c <span class="kw">for</span> c <span class="kw">in</span> tgt <span class="kw">if</span> c <span class="kw">not in</span> src]<br>
+&nbsp;&nbsp;&nbsp;&nbsp;type_diffs = {k: (src[k], tgt[k]) <span class="kw">for</span> k <span class="kw">in</span> src<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">if</span> k <span class="kw">in</span> tgt <span class="kw">and</span> src[k] != tgt[k]}<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">return</span> {<span class="st">"added"</span>: added, <span class="st">"removed"</span>: removed, <span class="st">"type_diffs"</span>: type_diffs}
+      </div>
+
+      <div class="code-view" id="code-oracle" style="display:none">
+<span class="cm"># connectors/oracle_conn.py</span><br>
+<span class="cm"># Oracle database connector using cx_Oracle</span><br>
+<br>
+<span class="kw">import</span> cx_Oracle<br>
+<span class="kw">import</span> pandas <span class="kw">as</span> pd<br>
+<span class="kw">from</span> typing <span class="kw">import</span> Optional<br>
+<span class="kw">import</span> os<br>
+<br>
+<span class="kw">class</span> <span class="cls">OracleConnector</span>:<br>
+&nbsp;&nbsp;<span class="cm">"""Connects to Oracle source systems and extracts</span><br>
+&nbsp;&nbsp;<span class="cm">schema metadata and row-level data."""</span><br>
+<br>
+&nbsp;&nbsp;<span class="kw">def</span> <span class="fn">__init__</span>(self):<br>
+&nbsp;&nbsp;&nbsp;&nbsp;self.dsn = cx_Oracle.makedsn(<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;os.getenv(<span class="st">"ORACLE_HOST"</span>),<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;os.getenv(<span class="st">"ORACLE_PORT"</span>, <span class="num">1521</span>),<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;service_name=os.getenv(<span class="st">"ORACLE_SERVICE"</span>)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;self.conn = None<br>
+<br>
+&nbsp;&nbsp;<span class="kw">def</span> <span class="fn">connect</span>(self):<br>
+&nbsp;&nbsp;&nbsp;&nbsp;self.conn = cx_Oracle.connect(<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;user=os.getenv(<span class="st">"ORACLE_USER"</span>),<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;password=os.getenv(<span class="st">"ORACLE_PASS"</span>),<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;dsn=self.dsn<br>
+&nbsp;&nbsp;&nbsp;&nbsp;)<br>
+<br>
+&nbsp;&nbsp;<span class="kw">def</span> <span class="fn">get_schema</span>(self, table: str) -> pd.DataFrame:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="cm">"""Returns column name, data type, nullable for a table."""</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;sql = <span class="st">"""</span><br>
+<span class="st">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;SELECT COLUMN_NAME, DATA_TYPE, NULLABLE</span><br>
+<span class="st">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;FROM ALL_TAB_COLUMNS</span><br>
+<span class="st">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;WHERE TABLE_NAME = :tbl</span><br>
+<span class="st">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ORDER BY COLUMN_ID"""</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">return</span> pd.read_sql(sql, self.conn, params={<span class="st">"tbl"</span>: table.upper()})<br>
+<br>
+&nbsp;&nbsp;<span class="kw">def</span> <span class="fn">get_row_count</span>(self, table: str) -> int:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;cur = self.conn.cursor()<br>
+&nbsp;&nbsp;&nbsp;&nbsp;cur.execute(f<span class="st">"SELECT COUNT(*) FROM {table}"</span>)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">return</span> cur.fetchone()[<span class="num">0</span>]<br>
+<br>
+&nbsp;&nbsp;<span class="kw">def</span> <span class="fn">get_null_counts</span>(self, table: str, col: str) -> int:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;cur = self.conn.cursor()<br>
+&nbsp;&nbsp;&nbsp;&nbsp;cur.execute(f<span class="st">"SELECT COUNT(*) FROM {table} WHERE {col} IS NULL"</span>)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">return</span> cur.fetchone()[<span class="num">0</span>]<br>
+<br>
+&nbsp;&nbsp;<span class="kw">def</span> <span class="fn">close</span>(self):<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">if</span> self.conn: self.conn.close()
+      </div>
+
+      <div class="code-view" id="code-hive" style="display:none">
+<span class="cm"># connectors/hive_conn.py</span><br>
+<span class="cm"># Apache Hive connector using PyHive</span><br>
+<br>
+<span class="kw">from</span> pyhive <span class="kw">import</span> hive<br>
+<span class="kw">import</span> pandas <span class="kw">as</span> pd<br>
+<span class="kw">from</span> pyspark.sql <span class="kw">import</span> SparkSession<br>
+<span class="kw">import</span> os<br>
+<br>
+<span class="kw">class</span> <span class="cls">HiveConnector</span>:<br>
+&nbsp;&nbsp;<span class="cm">"""Connects to Hive Metastore and executes HQL queries.</span><br>
+&nbsp;&nbsp;<span class="cm">Also supports SparkSession for large-scale operations."""</span><br>
+<br>
+&nbsp;&nbsp;<span class="kw">def</span> <span class="fn">__init__</span>(self, use_spark: bool = <span class="kw">False</span>):<br>
+&nbsp;&nbsp;&nbsp;&nbsp;self.host = os.getenv(<span class="st">"HIVE_HOST"</span>, <span class="st">"hiveserver2"</span>)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;self.port = int(os.getenv(<span class="st">"HIVE_PORT"</span>, <span class="num">10000</span>))<br>
+&nbsp;&nbsp;&nbsp;&nbsp;self.database = os.getenv(<span class="st">"HIVE_DB"</span>, <span class="st">"default"</span>)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;self.use_spark = use_spark<br>
+&nbsp;&nbsp;&nbsp;&nbsp;self._spark = <span class="kw">None</span><br>
+<br>
+&nbsp;&nbsp;<span class="dec">@property</span><br>
+&nbsp;&nbsp;<span class="kw">def</span> <span class="fn">spark</span>(self) -> SparkSession:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">if not</span> self._spark:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;self._spark = SparkSession.builder \<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.appName(<span class="st">"DataValidation"</span>) \<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.enableHiveSupport() \<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.getOrCreate()<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">return</span> self._spark<br>
+<br>
+&nbsp;&nbsp;<span class="kw">def</span> <span class="fn">get_schema</span>(self, table: str) -> pd.DataFrame:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;conn = hive.Connection(host=self.host, port=self.port,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;database=self.database)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">return</span> pd.read_sql(f<span class="st">"DESCRIBE {table}"</span>, conn)<br>
+<br>
+&nbsp;&nbsp;<span class="kw">def</span> <span class="fn">read_table_spark</span>(self, table: str):<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="cm">"""Read full table as Spark DataFrame for large jobs."""</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">return</span> self.spark.sql(f<span class="st">"SELECT * FROM {self.database}.{table}"</span>)<br>
+<br>
+&nbsp;&nbsp;<span class="kw">def</span> <span class="fn">get_duplicate_count</span>(self, table: str, pk_col: str) -> int:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;df = self.read_table_spark(table)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">from</span> pyspark.sql.functions <span class="kw">import</span> count<br>
+&nbsp;&nbsp;&nbsp;&nbsp;dupes = df.groupBy(pk_col).count().filter(<span class="st">"count > 1"</span>)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">return</span> dupes.count()
+      </div>
+
+      <div class="code-view" id="code-azure" style="display:none">
+<span class="cm"># connectors/azure_conn.py</span><br>
+<span class="cm"># Azure Data Lake Storage Gen2 connector</span><br>
+<br>
+<span class="kw">from</span> azure.storage.filedatalake <span class="kw">import</span> DataLakeServiceClient<br>
+<span class="kw">from</span> azure.identity <span class="kw">import</span> DefaultAzureCredential<br>
+<span class="kw">from</span> pyspark.sql <span class="kw">import</span> SparkSession<br>
+<span class="kw">import</span> os<br>
+<br>
+<span class="kw">class</span> <span class="cls">AzureADLSConnector</span>:<br>
+&nbsp;&nbsp;<span class="cm">"""Azure Data Lake Gen2 connector using Managed Identity.</span><br>
+&nbsp;&nbsp;<span class="cm">Supports Spark-native reads for large validation jobs."""</span><br>
+<br>
+&nbsp;&nbsp;<span class="kw">def</span> <span class="fn">__init__</span>(self):<br>
+&nbsp;&nbsp;&nbsp;&nbsp;self.account = os.getenv(<span class="st">"ADLS_ACCOUNT"</span>)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;self.container = os.getenv(<span class="st">"ADLS_CONTAINER"</span>)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;credential = DefaultAzureCredential()<br>
+&nbsp;&nbsp;&nbsp;&nbsp;self.client = DataLakeServiceClient(<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;account_url=f<span class="st">"https://{self.account}.dfs.core.windows.net"</span>,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;credential=credential<br>
+&nbsp;&nbsp;&nbsp;&nbsp;)<br>
+<br>
+&nbsp;&nbsp;<span class="kw">def</span> <span class="fn">read_parquet_spark</span>(self, path: str):<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="cm">"""Read Parquet data from ADLS into Spark DataFrame."""</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;spark = SparkSession.builder.getOrCreate()<br>
+&nbsp;&nbsp;&nbsp;&nbsp;full_path = (<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;f<span class="st">"abfss://{self.container}@"</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;f<span class="st">"{self.account}.dfs.core.windows.net/{path}"</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">return</span> spark.read.parquet(full_path)<br>
+<br>
+&nbsp;&nbsp;<span class="kw">def</span> <span class="fn">write_report</span>(self, report_json: str, run_id: str):<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="cm">"""Write validation report JSON back to ADLS."""</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;fs = self.client.get_file_system_client(self.container)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;file_client = fs.get_file_client(f<span class="st">"reports/{run_id}.json"</span>)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;file_client.upload_data(report_json, overwrite=<span class="kw">True</span>)
+      </div>
+
+      <div class="code-view" id="code-spark" style="display:none">
+<span class="cm"># validation_engine/row_count.py</span><br>
+<span class="cm"># PySpark-based validation checks</span><br>
+<br>
+<span class="kw">from</span> pyspark.sql <span class="kw">import</span> DataFrame<br>
+<span class="kw">from</span> pyspark.sql <span class="kw">import</span> functions <span class="kw">as</span> F<br>
+<span class="kw">from</span> dataclasses <span class="kw">import</span> dataclass<br>
+<br>
+@dataclass<br>
+<span class="kw">class</span> <span class="cls">CheckResult</span>:<br>
+&nbsp;&nbsp;check: str<br>
+&nbsp;&nbsp;status: str  <span class="cm"># PASS | FAIL | WARN</span><br>
+&nbsp;&nbsp;detail: str<br>
+<br>
+<span class="kw">def</span> <span class="fn">validate_row_count</span>(src: DataFrame, tgt: DataFrame) -> CheckResult:<br>
+&nbsp;&nbsp;sc, tc = src.count(), tgt.count()<br>
+&nbsp;&nbsp;pct_diff = abs(sc - tc) / max(sc, <span class="num">1</span>)<br>
+&nbsp;&nbsp;<span class="kw">if</span> sc == tc:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">return</span> CheckResult(<span class="st">"row_count"</span>, <span class="st">"PASS"</span>, f<span class="st">"Both={sc:,}"</span>)<br>
+&nbsp;&nbsp;<span class="kw">elif</span> pct_diff &lt; <span class="num">0.001</span>:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">return</span> CheckResult(<span class="st">"row_count"</span>, <span class="st">"WARN"</span>, f<span class="st">"src={sc:,} tgt={tc:,}"</span>)<br>
+&nbsp;&nbsp;<span class="kw">return</span> CheckResult(<span class="st">"row_count"</span>, <span class="st">"FAIL"</span>, f<span class="st">"src={sc:,} tgt={tc:,}"</span>)<br>
+<br>
+<span class="kw">def</span> <span class="fn">validate_nulls</span>(df: DataFrame, col: str,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;threshold: float = <span class="num">0.05</span>) -> CheckResult:<br>
+&nbsp;&nbsp;total = df.count()<br>
+&nbsp;&nbsp;nulls = df.filter(F.col(col).isNull()).count()<br>
+&nbsp;&nbsp;pct = nulls / max(total, <span class="num">1</span>)<br>
+&nbsp;&nbsp;status = <span class="st">"PASS"</span> <span class="kw">if</span> pct == <span class="num">0</span> <span class="kw">else</span> (<span class="st">"WARN"</span> <span class="kw">if</span> pct &lt; threshold <span class="kw">else</span> <span class="st">"FAIL"</span>)<br>
+&nbsp;&nbsp;<span class="kw">return</span> CheckResult(f<span class="st">"null_{col}"</span>, status, f<span class="st">"{nulls:,} nulls ({pct:.2%})"</span>)<br>
+<br>
+<span class="kw">def</span> <span class="fn">validate_pk_integrity</span>(df: DataFrame, pk: str) -> CheckResult:<br>
+&nbsp;&nbsp;total = df.count()<br>
+&nbsp;&nbsp;distinct = df.select(pk).distinct().count()<br>
+&nbsp;&nbsp;dupes = total - distinct<br>
+&nbsp;&nbsp;status = <span class="st">"PASS"</span> <span class="kw">if</span> dupes == <span class="num">0</span> <span class="kw">else</span> <span class="st">"FAIL"</span><br>
+&nbsp;&nbsp;<span class="kw">return</span> CheckResult(f<span class="st">"pk_{pk}"</span>, status, f<span class="st">"{dupes} duplicates"</span>)<br>
+<br>
+<span class="kw">def</span> <span class="fn">validate_dtype_match</span>(src: DataFrame, tgt: DataFrame) -> list[CheckResult]:<br>
+&nbsp;&nbsp;src_types = dict(src.dtypes)<br>
+&nbsp;&nbsp;results = []<br>
+&nbsp;&nbsp;<span class="kw">for</span> col, dtype <span class="kw">in</span> tgt.dtypes:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">if</span> col <span class="kw">in</span> src_types <span class="kw">and</span> src_types[col] != dtype:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;results.append(CheckResult(<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;f<span class="st">"dtype_{col}"</span>, <span class="st">"WARN"</span>,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;f<span class="st">"src={src_types[col]} tgt={dtype}"</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;))<br>
+&nbsp;&nbsp;<span class="kw">return</span> results
+      </div>
+
+      <div class="code-view" id="code-dag" style="display:none">
+<span class="cm"># data_pipelines/validation_dag.py</span><br>
+<span class="cm"># Apache Airflow DAG for orchestrating validation pipeline</span><br>
+<br>
+<span class="kw">from</span> airflow <span class="kw">import</span> DAG<br>
+<span class="kw">from</span> airflow.operators.python <span class="kw">import</span> PythonOperator<br>
+<span class="kw">from</span> airflow.utils.dates <span class="kw">import</span> days_ago<br>
+<span class="kw">from</span> datetime <span class="kw">import</span> timedelta<br>
+<span class="kw">from</span> backend.validation_engine.test_generator <span class="kw">import</span> TestCaseGenerator<br>
+<span class="kw">from</span> backend.validation_engine.row_count <span class="kw">import</span> (<br>
+&nbsp;&nbsp;validate_row_count, validate_nulls,<br>
+&nbsp;&nbsp;validate_pk_integrity, validate_dtype_match<br>
+)<br>
+<span class="kw">from</span> backend.report_engine.report_builder <span class="kw">import</span> ReportBuilder<br>
+<span class="kw">from</span> backend.connectors.oracle_conn <span class="kw">import</span> OracleConnector<br>
+<span class="kw">from</span> backend.connectors.azure_conn <span class="kw">import</span> AzureADLSConnector<br>
+<br>
+default_args = {<br>
+&nbsp;&nbsp;<span class="st">"owner"</span>: <span class="st">"data-engineering"</span>,<br>
+&nbsp;&nbsp;<span class="st">"retries"</span>: <span class="num">2</span>,<br>
+&nbsp;&nbsp;<span class="st">"retry_delay"</span>: timedelta(minutes=<span class="num">5</span>),<br>
+}<br>
+<br>
+<span class="kw">with</span> DAG(<br>
+&nbsp;&nbsp;dag_id=<span class="st">"ai_data_validation"</span>,<br>
+&nbsp;&nbsp;default_args=default_args,<br>
+&nbsp;&nbsp;schedule_interval=<span class="st">"0 8 * * *"</span>,  <span class="cm"># daily 8AM</span><br>
+&nbsp;&nbsp;start_date=days_ago(<span class="num">1</span>),<br>
+&nbsp;&nbsp;catchup=<span class="kw">False</span>,<br>
+&nbsp;&nbsp;tags=[<span class="st">"validation"</span>, <span class="st">"ai"</span>, <span class="st">"data-quality"</span>],<br>
+) <span class="kw">as</span> dag:<br>
+<br>
+&nbsp;&nbsp;<span class="kw">def</span> <span class="fn">run_validation</span>(**ctx):<br>
+&nbsp;&nbsp;&nbsp;&nbsp;src = OracleConnector(); src.connect()<br>
+&nbsp;&nbsp;&nbsp;&nbsp;tgt = AzureADLSConnector()<br>
+&nbsp;&nbsp;&nbsp;&nbsp;gen = TestCaseGenerator(src.config, tgt.config)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;tests = gen.generate()<br>
+&nbsp;&nbsp;&nbsp;&nbsp;results = []<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">for</span> table <span class="kw">in</span> ctx[<span class="st">"params"</span>][<span class="st">"tables"</span>]:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;src_df = src.read_spark(table)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;tgt_df = tgt.read_parquet_spark(table)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;results += [<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;validate_row_count(src_df, tgt_df),<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;validate_nulls(src_df, <span class="st">"CUST_ID"</span>),<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;validate_pk_integrity(tgt_df, <span class="st">"CUST_ID"</span>),<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;] + validate_dtype_match(src_df, tgt_df)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;ReportBuilder(results).save(ctx[<span class="st">"run_id"</span>])<br>
+<br>
+&nbsp;&nbsp;validate_task = PythonOperator(<br>
+&nbsp;&nbsp;&nbsp;&nbsp;task_id=<span class="st">"run_validation"</span>,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;python_callable=run_validation,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;params={<span class="st">"tables"</span>: [<span class="st">"CUST_MASTER"</span>, <span class="st">"ORDERS_FACT"</span>]}<br>
+&nbsp;&nbsp;)
+      </div>
+
+      <div class="code-view" id="code-report" style="display:none">
+<span class="cm"># report_engine/report_builder.py</span><br>
+<span class="cm"># Builds Pass/Fail validation reports</span><br>
+<br>
+<span class="kw">import</span> json<br>
+<span class="kw">from</span> datetime <span class="kw">import</span> datetime<br>
+<span class="kw">from</span> typing <span class="kw">import</span> List<br>
+<span class="kw">from</span> ..validation_engine.row_count <span class="kw">import</span> CheckResult<br>
+<span class="kw">from</span> ..connectors.azure_conn <span class="kw">import</span> AzureADLSConnector<br>
+<br>
+<span class="kw">class</span> <span class="cls">ReportBuilder</span>:<br>
+&nbsp;&nbsp;<span class="cm">"""Builds structured validation reports with pass/fail</span><br>
+&nbsp;&nbsp;<span class="cm">status and detailed check results, stored to ADLS."""</span><br>
+<br>
+&nbsp;&nbsp;<span class="kw">def</span> <span class="fn">__init__</span>(self, results: List[CheckResult]):<br>
+&nbsp;&nbsp;&nbsp;&nbsp;self.results = results<br>
+&nbsp;&nbsp;&nbsp;&nbsp;self.adls = AzureADLSConnector()<br>
+<br>
+&nbsp;&nbsp;<span class="kw">def</span> <span class="fn">build</span>(self, run_id: str) -> dict:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;passed = [r <span class="kw">for</span> r <span class="kw">in</span> self.results <span class="kw">if</span> r.status == <span class="st">"PASS"</span>]<br>
+&nbsp;&nbsp;&nbsp;&nbsp;failed = [r <span class="kw">for</span> r <span class="kw">in</span> self.results <span class="kw">if</span> r.status == <span class="st">"FAIL"</span>]<br>
+&nbsp;&nbsp;&nbsp;&nbsp;warnings = [r <span class="kw">for</span> r <span class="kw">in</span> self.results <span class="kw">if</span> r.status == <span class="st">"WARN"</span>]<br>
+<br>
+&nbsp;&nbsp;&nbsp;&nbsp;overall = <span class="st">"PASS"</span> <span class="kw">if not</span> failed <span class="kw">else</span> (<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="st">"WARN"</span> <span class="kw">if not</span> failed <span class="kw">else</span> <span class="st">"FAIL"</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">return</span> {<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="st">"run_id"</span>: run_id,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="st">"timestamp"</span>: datetime.utcnow().isoformat(),<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="st">"overall_status"</span>: overall,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="st">"summary"</span>: {<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="st">"total"</span>: len(self.results),<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="st">"passed"</span>: len(passed),<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="st">"failed"</span>: len(failed),<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="st">"warnings"</span>: len(warnings),<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="st">"pass_rate"</span>: len(passed) / len(self.results)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;},<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="st">"checks"</span>: [<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{<span class="st">"check"</span>: r.check, <span class="st">"status"</span>: r.status,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="st">"detail"</span>: r.detail}<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">for</span> r <span class="kw">in</span> self.results<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;]<br>
+&nbsp;&nbsp;&nbsp;&nbsp;}<br>
+<br>
+&nbsp;&nbsp;<span class="kw">def</span> <span class="fn">save</span>(self, run_id: str):<br>
+&nbsp;&nbsp;&nbsp;&nbsp;report = self.build(run_id)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;self.adls.write_report(json.dumps(report, indent=<span class="num">2</span>), run_id)
+      </div>
+
+      <div class="code-view" id="code-api" style="display:none">
+<span class="cm"># api/routes.py</span><br>
+<span class="cm"># FastAPI REST endpoints for the validation service</span><br>
+<br>
+<span class="kw">from</span> fastapi <span class="kw">import</span> FastAPI, BackgroundTasks, HTTPException<br>
+<span class="kw">from</span> pydantic <span class="kw">import</span> BaseModel<br>
+<span class="kw">from</span> typing <span class="kw">import</span> List, Optional<br>
+<span class="kw">from</span> ..validation_engine.test_generator <span class="kw">import</span> TestCaseGenerator<br>
+<span class="kw">from</span> ..validation_engine.row_count <span class="kw">import</span> *<br>
+<span class="kw">from</span> ..report_engine.report_builder <span class="kw">import</span> ReportBuilder<br>
+<br>
+app = FastAPI(title=<span class="st">"AI Data Validation API"</span>, version=<span class="st">"1.0.0"</span>)<br>
+<br>
+<span class="kw">class</span> <span class="cls">RunRequest</span>(BaseModel):<br>
+&nbsp;&nbsp;source_type: str  <span class="cm"># oracle | hive | adls</span><br>
+&nbsp;&nbsp;target_type: str<br>
+&nbsp;&nbsp;tables: List[str]<br>
+&nbsp;&nbsp;pk_columns: Optional[dict] = {}<br>
+<br>
+<span class="dec">@app.post</span>(<span class="st">"/api/v1/validate"</span>)<br>
+<span class="kw">async def</span> <span class="fn">trigger_validation</span>(req: RunRequest, bg: BackgroundTasks):<br>
+&nbsp;&nbsp;<span class="cm">"""Trigger a new validation run — async background task."""</span><br>
+&nbsp;&nbsp;run_id = f<span class="st">"RUN-{int(time.time())}"</span><br>
+&nbsp;&nbsp;bg.add_task(run_validation_task, run_id, req)<br>
+&nbsp;&nbsp;<span class="kw">return</span> {<span class="st">"run_id"</span>: run_id, <span class="st">"status"</span>: <span class="st">"queued"</span>}<br>
+<br>
+<span class="dec">@app.get</span>(<span class="st">"/api/v1/runs/{run_id}"</span>)<br>
+<span class="kw">async def</span> <span class="fn">get_run_status</span>(run_id: str):<br>
+&nbsp;&nbsp;<span class="cm">"""Fetch status and results of a validation run."""</span><br>
+&nbsp;&nbsp;report = load_report_from_adls(run_id)<br>
+&nbsp;&nbsp;<span class="kw">if not</span> report:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">raise</span> HTTPException(<span class="num">404</span>, <span class="st">"Run not found"</span>)<br>
+&nbsp;&nbsp;<span class="kw">return</span> report<br>
+<br>
+<span class="dec">@app.get</span>(<span class="st">"/api/v1/runs"</span>)<br>
+<span class="kw">async def</span> <span class="fn">list_runs</span>(limit: int = <span class="num">20</span>):<br>
+&nbsp;&nbsp;<span class="cm">"""List recent validation runs with summary stats."""</span><br>
+&nbsp;&nbsp;<span class="kw">return</span> list_reports_from_adls(limit=limit)<br>
+<br>
+<span class="dec">@app.get</span>(<span class="st">"/health"</span>)<br>
+<span class="kw">async def</span> <span class="fn">health</span>(): <span class="kw">return</span> {<span class="st">"status"</span>: <span class="st">"ok"</span>}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     PAGE 5: ARCHITECTURE
+════════════════════════════════════════════════════════════════ -->
+<div class="page" id="page-architecture">
+  <div class="page-header">
+    <div class="page-title">System Architecture</div>
+    <div class="page-sub">End-to-end architecture for client presentation — tools, layers, and data flow</div>
+  </div>
+
+  <!-- TOOLS GRID -->
+  <div class="grid-3" style="margin-bottom:16px">
+    <div class="card" style="border-color:rgba(245,158,11,0.3)">
+      <div class="card-header"><span class="card-title">⚡ Processing Layer</span></div>
+      <div class="check-row"><div><div class="check-name">Apache Spark / PySpark</div><div class="check-detail">Row counts, null checks, dedup at scale</div></div><span class="badge badge-run">Core</span></div>
+      <div class="check-row"><div><div class="check-name">dbt</div><div class="check-detail">Schema tests &amp; business rule validation</div></div><span class="badge badge-pass">Tests</span></div>
+      <div class="check-row"><div><div class="check-name">Great Expectations</div><div class="check-detail">Auto-generate expectation suites</div></div><span class="badge badge-warn">Quality</span></div>
+    </div>
+    <div class="card" style="border-color:rgba(6,182,212,0.3)">
+      <div class="card-header"><span class="card-title">🗄️ Source Connectors</span></div>
+      <div class="check-row"><div><div class="check-name">cx_Oracle</div><div class="check-detail">Oracle DB: schema, PK, row data</div></div><span class="badge badge-pass">Source</span></div>
+      <div class="check-row"><div><div class="check-name">PyHive + HiveServer2</div><div class="check-detail">Hive Metastore schema &amp; HQL queries</div></div><span class="badge badge-pass">Source</span></div>
+      <div class="check-row"><div><div class="check-name">ADLS Gen2 SDK</div><div class="check-detail">Azure Data Lake read/write</div></div><span class="badge badge-pass">Target</span></div>
+    </div>
+    <div class="card" style="border-color:rgba(124,92,252,0.3)">
+      <div class="card-header"><span class="card-title">🤖 AI &amp; Orchestration</span></div>
+      <div class="check-row"><div><div class="check-name">Claude API (Anthropic)</div><div class="check-detail">Dynamic test case generation from schema diffs</div></div><span class="badge" style="background:rgba(124,92,252,0.12);color:var(--accent2);border:1px solid rgba(124,92,252,0.2)">AI</span></div>
+      <div class="check-row"><div><div class="check-name">Apache Airflow</div><div class="check-detail">Pipeline DAG scheduling &amp; monitoring</div></div><span class="badge badge-run">Orchestrate</span></div>
+      <div class="check-row"><div><div class="check-name">FastAPI</div><div class="check-detail">REST API for validation trigger &amp; reports</div></div><span class="badge badge-pass">API</span></div>
+    </div>
+  </div>
+
+  <!-- ARCHITECTURE LAYERS -->
+  <div class="card">
+    <div class="card-header"><span class="card-title">Layer-by-Layer Architecture</span></div>
+    <div style="display:flex;flex-direction:column;gap:12px;">
+      <div style="display:grid;grid-template-columns:140px 1fr;gap:14px;align-items:center">
+        <div style="font-size:12px;color:var(--muted);text-align:right;font-family:var(--font-mono)">PRESENTATION</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <div style="background:rgba(34,211,160,0.08);border:1px solid rgba(34,211,160,0.2);border-radius:8px;padding:10px 16px;font-size:13px;">📊 React Dashboard</div>
+          <div style="background:rgba(34,211,160,0.08);border:1px solid rgba(34,211,160,0.2);border-radius:8px;padding:10px 16px;font-size:13px;">📄 Validation Reports</div>
+          <div style="background:rgba(34,211,160,0.08);border:1px solid rgba(34,211,160,0.2);border-radius:8px;padding:10px 16px;font-size:13px;">🔔 Alerts (email/Slack)</div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:140px 1fr;gap:14px;align-items:center">
+        <div style="font-size:12px;color:var(--muted);text-align:right;font-family:var(--font-mono)">API LAYER</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <div style="background:rgba(79,142,247,0.08);border:1px solid rgba(79,142,247,0.2);border-radius:8px;padding:10px 16px;font-size:13px;">⚙️ FastAPI Service</div>
+          <div style="background:rgba(79,142,247,0.08);border:1px solid rgba(79,142,247,0.2);border-radius:8px;padding:10px 16px;font-size:13px;">📋 OpenAPI Spec</div>
+          <div style="background:rgba(79,142,247,0.08);border:1px solid rgba(79,142,247,0.2);border-radius:8px;padding:10px 16px;font-size:13px;">🐳 Docker + nginx</div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:140px 1fr;gap:14px;align-items:center">
+        <div style="font-size:12px;color:var(--muted);text-align:right;font-family:var(--font-mono)">AI LAYER</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <div style="background:rgba(124,92,252,0.08);border:1px solid rgba(124,92,252,0.2);border-radius:8px;padding:10px 16px;font-size:13px;">🤖 Claude API (Test Gen)</div>
+          <div style="background:rgba(124,92,252,0.08);border:1px solid rgba(124,92,252,0.2);border-radius:8px;padding:10px 16px;font-size:13px;">📐 Schema Diff Engine</div>
+          <div style="background:rgba(124,92,252,0.08);border:1px solid rgba(124,92,252,0.2);border-radius:8px;padding:10px 16px;font-size:13px;">📜 Rule Inference</div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:140px 1fr;gap:14px;align-items:center">
+        <div style="font-size:12px;color:var(--muted);text-align:right;font-family:var(--font-mono)">PROCESSING</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:8px;padding:10px 16px;font-size:13px;">⚡ PySpark Jobs</div>
+          <div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:8px;padding:10px 16px;font-size:13px;">📦 dbt Models</div>
+          <div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:8px;padding:10px 16px;font-size:13px;">✅ Great Expectations</div>
+          <div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:8px;padding:10px 16px;font-size:13px;">🔁 Airflow DAG</div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:140px 1fr;gap:14px;align-items:center">
+        <div style="font-size:12px;color:var(--muted);text-align:right;font-family:var(--font-mono)">DATA SOURCES</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <div style="background:rgba(34,211,160,0.06);border:1px solid rgba(34,211,160,0.15);border-radius:8px;padding:10px 16px;font-size:13px;">🗄️ Oracle (cx_Oracle)</div>
+          <div style="background:rgba(6,182,212,0.06);border:1px solid rgba(6,182,212,0.15);border-radius:8px;padding:10px 16px;font-size:13px;">🐝 Hive (PyHive)</div>
+          <div style="background:rgba(79,142,247,0.06);border:1px solid rgba(79,142,247,0.15);border-radius:8px;padding:10px 16px;font-size:13px;">☁️ Azure ADLS Gen2</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SAMPLE DATA TABLE -->
+  <div class="card">
+    <div class="card-header"><span class="card-title">Sample Data — CUST_MASTER (Source: Oracle)</span><span class="badge badge-pass">5 rows preview</span></div>
+    <table>
+      <thead><tr><th>CUST_ID</th><th>FIRST_NAME</th><th>LAST_NAME</th><th>EMAIL</th><th>DOB</th><th>PHONE</th><th>COUNTRY_CD</th><th>LOYALTY_TIER</th><th>CREATED_AT</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">1001</td><td>Anjali</td><td>Sharma</td><td class="td-muted">anjali.s@email.com</td><td class="mono">1990-03-14</td><td class="mono">+91-9876543210</td><td class="mono">IN</td><td><span class="badge badge-pass">GOLD</span></td><td class="mono td-muted">2024-01-10</td></tr>
+        <tr><td class="mono">1002</td><td>Rajesh</td><td>Kumar</td><td class="td-muted">raj.kumar@corp.in</td><td class="mono">1985-07-22</td><td class="mono">+91-9123456789</td><td class="mono">IN</td><td><span class="badge badge-run">PLATINUM</span></td><td class="mono td-muted">2024-01-11</td></tr>
+        <tr><td class="mono">1003</td><td>Priya</td><td>Nair</td><td class="td-muted" style="color:var(--red)">NULL ⚠</td><td class="mono">1995-11-05</td><td class="mono">+91-9012345678</td><td class="mono">IN</td><td><span class="badge badge-warn">SILVER</span></td><td class="mono td-muted">2024-02-01</td></tr>
+        <tr><td class="mono">1004</td><td>Vikram</td><td>Singh</td><td class="td-muted">vikram@mail.com</td><td class="mono">1978-04-30</td><td class="mono">+91-9988776655</td><td class="mono">IN</td><td><span class="badge badge-pass">GOLD</span></td><td class="mono td-muted">2024-02-14</td></tr>
+        <tr><td class="mono" style="color:var(--red)">1002 ⚠</td><td>Rajesh</td><td>Kumar</td><td class="td-muted">raj.kumar@corp.in</td><td class="mono">1985-07-22</td><td class="mono">+91-9123456789</td><td class="mono">IN</td><td><span class="badge badge-run">PLATINUM</span></td><td class="mono td-muted" style="color:var(--red)">DUPLICATE</td></tr>
+      </tbody>
+    </table>
+    <div style="margin-top:14px;padding:10px 14px;background:rgba(244,63,94,0.06);border:1px solid rgba(244,63,94,0.15);border-radius:8px;font-size:13px;color:var(--red)">
+      ⚠ Row 5: CUST_ID 1002 is a duplicate in target (ADLS). This triggered TC-002 FAIL. Also note NULL EMAIL on row 3 (1 of 1,204 nulls) and missing LOYALTY_TIER column in target.
+    </div>
+  </div>
+</div>
+
+<script>
+  function showPage(id) {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+    document.getElementById('page-' + id).classList.add('active');
+    event.target.classList.add('active');
+  }
+
+  function showCode(id) {
+    document.querySelectorAll('.code-view').forEach(v => v.style.display = 'none');
+    document.querySelectorAll('.code-ftab').forEach(t => t.classList.remove('active'));
+    document.getElementById('code-' + id).style.display = 'block';
+    event.target.classList.add('active');
+  }
+</script>
+</body>
+</html>
