@@ -1,0 +1,1361 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Source Target Recon</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: two mirrored upload decks (source left, target right) over a full-width result bench */
+:root{
+  --bg:#f3f5f8; --panel:#ffffff; --ink:#18202c; --muted:#5d6878; --line:#dbe1ea;
+  --accent:#2350b8; --accent-ink:#ffffff;
+  --src:#3b4fd8; --src-soft:#eceffe; --tgt:#b8650f; --tgt-soft:#fdf2e4;
+  --ok:#17824a; --ok-soft:#e3f5ea; --bad:#c42b3a; --bad-soft:#fde6e8; --warn:#9a6a00; --warn-soft:#fff4d6; --info:#1f6fb2; --info-soft:#e3effa;
+  --f-display:"Manrope",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-body:"Manrope",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f141b; --panel:#171e28; --ink:#e6ebf2; --muted:#93a0b2; --line:#2a3443;
+  --accent:#6f95ff; --accent-ink:#0b1020;
+  --src:#8d9bff; --src-soft:#1f2547; --tgt:#f0a557; --tgt-soft:#3a2914;
+  --ok:#4fd08a; --ok-soft:#143322; --bad:#ff7482; --bad-soft:#3d1a1f; --warn:#f2c14e; --warn-soft:#3a2f12; --info:#7cc0ff; --info-soft:#14283d;
+  color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f141b; --panel:#171e28; --ink:#e6ebf2; --muted:#93a0b2; --line:#2a3443;
+  --accent:#6f95ff; --accent-ink:#0b1020;
+  --src:#8d9bff; --src-soft:#1f2547; --tgt:#f0a557; --tgt-soft:#3a2914;
+  --ok:#4fd08a; --ok-soft:#143322; --bad:#ff7482; --bad-soft:#3d1a1f; --warn:#f2c14e; --warn-soft:#3a2f12; --info:#7cc0ff; --info-soft:#14283d;
+  color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.5;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 40px}
+.wrap{max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+h1,h2,h3{font-family:var(--f-display);margin:0;text-wrap:balance}
+h1{font-size:1.45rem;font-weight:800;letter-spacing:-.01em}
+h2{font-size:1.05rem;font-weight:700}
+.label{font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:700}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+button,.btn{font:inherit;font-weight:700;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:9px 14px;cursor:pointer}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+button:disabled{opacity:.45;cursor:not-allowed}
+button:focus-visible,input:focus-visible,select:focus-visible,label.drop:focus-within{outline:2px solid var(--accent);outline-offset:2px}
+input[type=text],input[type=password],select{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:9px 11px;width:100%}
+
+/* login */
+#login{min-height:70vh;display:grid;place-items:center}
+.login-card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:28px;width:100%;max-width:380px;display:flex;flex-direction:column;gap:14px}
+.login-card p{margin:0;color:var(--muted)}
+.mark{display:block;width:84px;height:auto;margin:0 auto 4px}
+.field{display:flex;flex-direction:column;gap:5px}
+.err{color:var(--bad);font-size:.85rem;min-height:1.2em}
+
+/* top bar */
+.topbar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.topbar .who{display:flex;gap:10px;align-items:center;color:var(--muted)}
+
+/* decks */
+.decks{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media (max-width:760px){.decks{grid-template-columns:1fr}}
+.deck{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:12px;min-width:0;border-top:4px solid var(--c)}
+.deck.src{--c:var(--src);--cs:var(--src-soft)} .deck.tgt{--c:var(--tgt);--cs:var(--tgt-soft)}
+.deck-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.deck-head h2{color:var(--c)}
+label.drop{display:flex;flex-direction:column;align-items:center;gap:4px;padding:18px;border:1.5px dashed var(--c);border-radius:10px;background:var(--cs);cursor:pointer;text-align:center}
+label.drop input{position:absolute;width:1px;height:1px;opacity:0}
+label.drop.over{border-style:solid}
+.drop strong{color:var(--c)}
+.drop small{color:var(--muted)}
+.fileinfo{font-size:.85rem;color:var(--muted)}
+.fileinfo b{color:var(--ink)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font-family:var(--f-mono);font-size:.75rem;padding:2px 8px;border-radius:99px;background:var(--bg);border:1px solid var(--line)}
+.chip.only{background:var(--warn-soft);border-color:transparent;color:var(--warn)}
+.peek{overflow-x:auto;border:1px solid var(--line);border-radius:8px;max-height:180px}
+
+/* tabs + controls */
+.bench{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.tab{border:none;border-bottom:3px solid transparent;border-radius:0;background:none;padding:8px 12px;color:var(--muted)}
+.tab[aria-selected=true]{color:var(--ink);border-bottom-color:var(--accent)}
+.controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;align-items:end}
+.check{display:flex;gap:8px;align-items:center;font-weight:600}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.note{font-size:.85rem;color:var(--muted)}
+
+/* summary strip */
+.summary{display:flex;flex-wrap:wrap;gap:8px}
+.pill{display:flex;gap:6px;align-items:baseline;padding:6px 12px;border-radius:8px;background:var(--bg);border:1px solid var(--line);font-size:.85rem}
+.pill b{font-family:var(--f-mono);font-size:1rem}
+.pill.ok{background:var(--ok-soft);border-color:transparent;color:var(--ok)}
+.pill.bad{background:var(--bad-soft);border-color:transparent;color:var(--bad)}
+.pill.warn{background:var(--warn-soft);border-color:transparent;color:var(--warn)}
+
+/* tables */
+.tablebox{overflow-x:auto;border:1px solid var(--line);border-radius:8px;max-height:460px}
+table{border-collapse:collapse;width:100%;font-size:.82rem}
+th,td{padding:6px 10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap;font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+th{position:sticky;top:0;background:var(--panel);font-family:var(--f-body);font-weight:700;font-size:.74rem;z-index:1}
+th.s{color:var(--src)} th.t{color:var(--tgt)}
+td.T{color:var(--ok);font-weight:700;background:var(--ok-soft)} td.F{color:var(--bad);font-weight:800;background:var(--bad-soft)}
+.dqrule{display:flex;flex-direction:column;gap:10px;padding:14px;border:1px solid var(--line);border-radius:10px;background:var(--bg)}
+.dqrule h3{font-size:1rem}.dqrule p{margin:2px 0 0}
+td.sideS{color:var(--src);font-weight:600} td.sideT{color:var(--tgt);font-weight:600}
+.codepair{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:760px){.codepair{grid-template-columns:1fr}}
+.codepair .field{min-width:0}
+textarea{font-family:var(--f-mono);font-size:.82rem;line-height:1.5;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px;width:100%;min-height:220px;resize:vertical;tab-size:4}
+textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.codediff{max-height:560px}
+.codediff table{table-layout:fixed;min-width:640px}
+.codediff td{white-space:pre;vertical-align:top;border-bottom:none;padding:1px 8px;overflow:hidden;text-overflow:clip}
+.codediff td.ln{width:46px;text-align:right;color:var(--muted);user-select:none;border-right:1px solid var(--line)}
+.codediff td.gap{width:6px;padding:0;background:var(--line)}
+.codediff tr.del td.l{background:var(--bad-soft)} .codediff tr.add td.r{background:var(--ok-soft)}
+.codediff tr.chg td.l{background:var(--bad-soft)} .codediff tr.chg td.r{background:var(--ok-soft)}
+.codediff td.empty{background:repeating-linear-gradient(135deg,transparent 0 6px,var(--line) 6px 7px)}
+.codediff mark{background:none;font-weight:700;border-radius:3px;padding:0 1px}
+.codediff td.l mark{background:var(--bad);color:var(--panel)} .codediff td.r mark{background:var(--ok);color:var(--panel)}
+.codediff tr.fold td{color:var(--muted);font-style:italic;text-align:center;background:var(--bg);padding:3px}
+.sidehead{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.filebtn{position:relative;color:var(--accent);font-weight:700;font-size:.8rem;cursor:pointer;text-decoration:underline}
+.filebtn input{position:absolute;width:1px;height:1px;opacity:0}
+.filebtn:focus-within{outline:2px solid var(--accent);outline-offset:2px}
+textarea.over{border-color:var(--accent);border-style:dashed}
+td.st-same{color:var(--ok);font-weight:700}
+td.st-diff{background:var(--warn-soft);color:var(--warn);font-weight:700}
+td.st-src{background:var(--bad-soft);color:var(--bad);font-weight:700}
+td.st-tgt{background:var(--info-soft);color:var(--info);font-weight:700}
+tr.grp td{background:var(--bg);font-family:var(--f-body);font-weight:800;color:var(--ink);border-top:2px solid var(--line)}
+td.det{white-space:normal;min-width:220px;font-family:var(--f-body)}
+td.diff{background:var(--warn-soft);color:var(--ink)}
+td.miss{color:var(--muted);font-style:italic}
+tr.rowbad td:first-child{box-shadow:inset 3px 0 var(--bad)}
+.colstats td{font-family:var(--f-mono)}
+.statgrid{display:flex;flex-wrap:wrap;gap:6px}
+.statgrid label{display:flex;gap:6px;align-items:center;padding:4px 10px;border:1px solid var(--line);border-radius:99px;font-size:.82rem;font-weight:600;cursor:pointer}
+.toast{min-height:1.3em;font-size:.85rem;font-weight:600}
+.toast.ok{color:var(--ok)} .toast.bad{color:var(--bad)}
+@media (prefers-reduced-motion:no-preference){button{transition:filter .15s}button:hover:not(:disabled){filter:brightness(1.07)}}
+
+/* ===================== Theme layer: navy hero, teal accent, indigo source, amber target ===================== */
+:root{
+  --bg:#f2f5fa; --panel:#ffffff; --panel-2:#f6f8fc; --ink:#0e1730; --muted:#566381; --line:#e1e7f1; --line-2:#cdd6e6;
+  --accent:#0b7f77; --accent-ink:#ffffff; --accent-soft:#e0f4f1; --accent-glow:rgba(11,127,119,.30);
+  --src:#4b49d6; --src-soft:#eeefff; --tgt:#bf5b08; --tgt-soft:#fff1e3;
+  --ok:#127a3f; --ok-soft:#e2f5e9; --bad:#c22539; --bad-soft:#fde8eb; --warn:#965a00; --warn-soft:#fff2d1; --info:#1b67b0; --info-soft:#e3effb;
+  --hero-a:#0a1330; --hero-b:#14265e; --hero-c:#0b4e5f; --hero-ink:#f1f4ff; --hero-muted:#aab5da; --hero-line:rgba(255,255,255,.10);
+  --shadow:0 1px 2px rgba(14,23,48,.05),0 10px 28px -14px rgba(14,23,48,.22);
+  --radius:16px;
+  --f-display:"Sora","Manrope",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-body:"Manrope",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0a0f1d; --panel:#111a2d; --panel-2:#0d1526; --ink:#e7ecf8; --muted:#95a2c1; --line:#21304c; --line-2:#2d3e60;
+  --accent:#2dd4bf; --accent-ink:#04211e; --accent-soft:#0e2e2b; --accent-glow:rgba(45,212,191,.28);
+  --src:#a7b1ff; --src-soft:#1c2150; --tgt:#ffb45e; --tgt-soft:#33230f;
+  --ok:#4ade80; --ok-soft:#0e2c1b; --bad:#ff7d8e; --bad-soft:#3a1520; --warn:#fcd34d; --warn-soft:#33290b; --info:#7cc0ff; --info-soft:#12273e;
+  --hero-a:#050a18; --hero-b:#0c1840; --hero-c:#063845; --hero-ink:#eef2ff; --hero-muted:#9ba9d1; --hero-line:rgba(255,255,255,.08);
+  --shadow:0 1px 2px rgba(0,0,0,.45),0 12px 32px -16px rgba(0,0,0,.75);
+  color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0a0f1d; --panel:#111a2d; --panel-2:#0d1526; --ink:#e7ecf8; --muted:#95a2c1; --line:#21304c; --line-2:#2d3e60;
+  --accent:#2dd4bf; --accent-ink:#04211e; --accent-soft:#0e2e2b; --accent-glow:rgba(45,212,191,.28);
+  --src:#a7b1ff; --src-soft:#1c2150; --tgt:#ffb45e; --tgt-soft:#33230f;
+  --ok:#4ade80; --ok-soft:#0e2c1b; --bad:#ff7d8e; --bad-soft:#3a1520; --warn:#fcd34d; --warn-soft:#33290b; --info:#7cc0ff; --info-soft:#12273e;
+  --hero-a:#050a18; --hero-b:#0c1840; --hero-c:#063845; --hero-ink:#eef2ff; --hero-muted:#9ba9d1; --hero-line:rgba(255,255,255,.08);
+  --shadow:0 1px 2px rgba(0,0,0,.45),0 12px 32px -16px rgba(0,0,0,.75);
+  color-scheme:dark}
+
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);padding:0;margin:0}
+h1,h2,h3{font-family:var(--f-display);letter-spacing:-.015em}
+.label{letter-spacing:.09em}
+input[type=checkbox]{accent-color:var(--accent);width:16px;height:16px;margin:0}
+
+/* ---------- hero ---------- */
+.hero,.login-art{position:relative;color:var(--hero-ink);overflow:hidden;background:
+  radial-gradient(900px 320px at 88% -30%,rgba(45,212,191,.30),transparent 62%),
+  radial-gradient(760px 300px at -5% -10%,rgba(99,102,241,.42),transparent 60%),
+  linear-gradient(135deg,var(--hero-a),var(--hero-b) 55%,var(--hero-c))}
+.hero::before,.login-art::before{content:"";position:absolute;inset:0;pointer-events:none;
+  background-image:linear-gradient(var(--hero-line) 1px,transparent 1px),linear-gradient(90deg,var(--hero-line) 1px,transparent 1px);
+  background-size:28px 28px;-webkit-mask-image:linear-gradient(180deg,#000,transparent 90%);mask-image:linear-gradient(180deg,#000,transparent 90%)}
+.hero-in{position:relative;max-width:1240px;margin:0 auto;display:flex;flex-direction:column;gap:12px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:22px 0}
+.hero .topbar{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:14px;min-width:0}
+.brandmark{width:54px;height:auto;flex:none;filter:drop-shadow(0 8px 18px rgba(0,0,0,.35))}
+.eyebrow{font-size:.7rem;letter-spacing:.16em;text-transform:uppercase;color:var(--hero-muted);font-weight:700}
+.hero h1{font-size:clamp(1.45rem,1.05rem + 1.5vw,2.05rem);font-weight:700;color:var(--hero-ink);margin:2px 0 0;line-height:1.15}
+.grad{background:linear-gradient(90deg,#8ab4ff,#5eead4);-webkit-background-clip:text;background-clip:text;color:transparent}
+.tagline{margin:0;color:var(--hero-muted);max-width:68ch;font-size:.95rem}
+.who{display:flex;gap:8px;align-items:center;flex-wrap:wrap;color:rgba(241,244,255,.82);font-size:.9rem}
+.hero .who{color:rgba(241,244,255,.82)}
+.who b{color:var(--hero-ink)}
+.who button{background:rgba(255,255,255,.08);color:var(--hero-ink);border:1px solid rgba(255,255,255,.18);padding:7px 12px}
+.who button:hover:not(:disabled){background:rgba(255,255,255,.16);border-color:rgba(255,255,255,.3)}
+.who .chip{background:rgba(45,212,191,.18);color:#99f6e4;border-color:transparent;font-family:var(--f-body);font-weight:700}
+
+.hero .tabs{display:flex;flex-wrap:nowrap;gap:4px;border:0;overflow-x:auto;scrollbar-width:none;margin-top:8px;padding-top:2px}
+.hero .tabs::-webkit-scrollbar{display:none}
+.hero .tab{display:flex;align-items:center;gap:8px;flex:none;color:var(--hero-muted);background:transparent;border:0;border-radius:12px 12px 0 0;padding:11px 16px 13px;font-weight:700;white-space:nowrap}
+.hero .tab svg{width:18px;height:18px;flex:none;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.hero .tab:hover:not([aria-selected=true]){color:var(--hero-ink);background:rgba(255,255,255,.07);filter:none}
+.hero .tab[aria-selected=true]{background:var(--bg);color:var(--ink)}
+.hero .tab[aria-selected=true] svg{stroke:var(--accent)}
+.hero .tab:focus-visible{outline:2px solid #5eead4;outline-offset:-2px}
+
+/* ---------- page ---------- */
+.wrap{max-width:1240px;margin:0 auto;gap:20px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:22px 36px}
+.foot{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;color:var(--muted);font-size:.8rem;padding-top:6px;border-top:1px solid var(--line)}
+
+button,.btn{border-radius:10px;border:1px solid var(--line-2);background:var(--panel);color:var(--ink);padding:9px 15px;font-weight:700}
+@media (prefers-reduced-motion:no-preference){button,.btn{transition:transform .12s ease,box-shadow .15s ease,background-color .15s ease,border-color .15s ease}}
+button:hover:not(:disabled){border-color:var(--accent);filter:none}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);box-shadow:0 8px 18px -8px var(--accent-glow)}
+button.primary:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 12px 24px -10px var(--accent-glow)}
+input[type=text],input[type=password],select,textarea{background:var(--panel-2);border:1px solid var(--line);border-radius:10px}
+input[type=text]:focus-visible,input[type=password]:focus-visible,select:focus-visible,textarea:focus-visible{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+
+.bench,.deck{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
+.bench{padding:22px;gap:18px}
+.bench .bench{background:transparent;box-shadow:none;border:0;border-radius:0;padding:0}
+
+.decks{gap:18px}
+.deck{border-top:1px solid var(--line);position:relative;overflow:hidden;padding:18px}
+.deck::before{content:"";position:absolute;inset:0 0 auto;height:4px;background:linear-gradient(90deg,var(--c),transparent 85%)}
+.deck-head h2{font-size:1.1rem}
+.deck-head .label{background:var(--cs);color:var(--c);padding:3px 9px;border-radius:99px}
+label.drop{border:1.5px dashed var(--c);background:var(--cs);border-radius:12px;padding:22px 16px;gap:6px}
+label.drop strong{font-family:var(--f-display);font-size:1rem}
+label.drop::before{content:"";width:34px;height:34px;border-radius:10px;background:var(--c);opacity:.9;
+  -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 16V4m0 0L7 9m5-5l5 5'/%3E%3Cpath d='M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3'/%3E%3C/svg%3E") center/22px no-repeat;
+  mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 16V4m0 0L7 9m5-5l5 5'/%3E%3Cpath d='M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3'/%3E%3C/svg%3E") center/22px no-repeat}
+@media (prefers-reduced-motion:no-preference){label.drop{transition:transform .15s ease,box-shadow .15s ease}label.drop:hover,label.drop.over{transform:translateY(-1px);box-shadow:0 10px 24px -14px var(--c)}}
+.chip{background:var(--panel-2);border-color:var(--line)}
+
+.pane-head{display:flex;gap:14px;align-items:center;padding-bottom:16px;border-bottom:1px solid var(--line)}
+.pane-ico{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;flex:none;background:var(--accent-soft);color:var(--accent)}
+.pane-ico svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.pane-head h2{font-size:1.25rem;margin:0}
+.pane-head p{margin:2px 0 0;color:var(--muted);max-width:75ch}
+
+.controls{gap:10px;align-items:stretch}
+.controls .field{justify-content:flex-end}
+.controls .check{padding:8px 12px;border:1px solid var(--line);border-radius:10px;background:var(--panel-2);font-weight:600;font-size:.88rem;cursor:pointer}
+.controls .check:has(input:checked){border-color:color-mix(in srgb,var(--accent) 55%,var(--line));background:var(--accent-soft)}
+.statgrid label{background:var(--panel-2);border-color:var(--line)}
+.statgrid label:has(input:checked){border-color:color-mix(in srgb,var(--accent) 55%,var(--line));background:var(--accent-soft)}
+
+.summary{gap:10px}
+.pill{flex-direction:column;align-items:flex-start;gap:0;min-width:128px;padding:11px 15px;border-radius:12px;background:var(--panel-2);border:1px solid var(--line);color:var(--ink)}
+.pill b{order:-1;font-family:var(--f-display);font-size:1.4rem;line-height:1.15;font-variant-numeric:tabular-nums}
+.pill span{font-size:.7rem;text-transform:uppercase;letter-spacing:.07em;font-weight:700;opacity:.85}
+.pill.ok{background:var(--ok-soft);color:var(--ok);border-color:transparent}
+.pill.bad{background:var(--bad-soft);color:var(--bad);border-color:transparent}
+.pill.warn{background:var(--warn-soft);color:var(--warn);border-color:transparent}
+
+.tablebox{border-radius:12px;border:1px solid var(--line);background:var(--panel)}
+.tablebox th{background:var(--panel-2);color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-size:.68rem;border-bottom:1px solid var(--line-2);padding:9px 10px}
+.tablebox th.s{color:var(--src)} .tablebox th.t{color:var(--tgt)}
+.tablebox td{padding:7px 10px}
+.tablebox tr:hover>td{background-image:linear-gradient(rgba(110,128,170,.08),rgba(110,128,170,.08))}
+td.T,td.F{text-align:center;letter-spacing:.03em}
+tr.grp td{background:var(--panel-2)}
+
+.dqrule{background:var(--panel-2);border-radius:12px}
+.presetbar{background:var(--panel-2);border:1px solid var(--line);border-radius:12px;padding:12px 14px;border-bottom:1px solid var(--line)}
+textarea{background:var(--panel-2);border-radius:12px}
+.toast{font-size:.86rem}
+
+/* ---------- download bar ---------- */
+.exportbar{display:flex;flex-wrap:wrap;align-items:flex-end;gap:12px 14px;padding:16px;border-radius:14px;
+  border:1px solid color-mix(in srgb,var(--accent) 45%,var(--line));background:linear-gradient(180deg,var(--accent-soft),var(--panel) 140%)}
+.exp-ico{width:42px;height:42px;border-radius:12px;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;flex:none;box-shadow:0 8px 18px -8px var(--accent-glow)}
+.exp-ico svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.exportbar .grow{flex:1 1 280px;min-width:0}
+.fnrow{display:flex;align-items:stretch;border:1px solid var(--line-2);border-radius:10px;background:var(--panel);overflow:hidden;min-width:0}
+.fnrow input[type=text]{border:0;border-radius:0;background:transparent;min-width:0;flex:1;font-family:var(--f-mono);font-size:.86rem}
+.fnrow input[type=text]:focus-visible{box-shadow:none}
+.fnrow:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.fnext{display:flex;align-items:center;padding:0 12px;font-family:var(--f-mono);font-size:.82rem;color:var(--muted);background:var(--panel-2);border-left:1px solid var(--line);white-space:nowrap}
+.exportbar .check{padding:9px 0}
+.exportbar .toast{flex-basis:100%;min-height:0}
+.exportbar .toast:empty{display:none}
+
+/* ---------- sign-in ---------- */
+#login{min-height:100vh;display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);place-items:stretch}
+@supports (min-height:100dvh){#login{min-height:100dvh}}
+.login-art{display:flex;align-items:center}
+.art-in{position:relative;max-width:560px;margin:0 auto;display:flex;flex-direction:column;gap:18px;
+  padding-left:max(28px,env(safe-area-inset-left,0px));padding-right:28px;padding-block:48px}
+.art-title{font-family:var(--f-display);font-size:clamp(1.9rem,1.2rem + 2.6vw,3.1rem);line-height:1.08;margin:0;color:var(--hero-ink);font-weight:700}
+.art-sub{margin:0;color:var(--hero-muted);font-size:1rem;max-width:52ch}
+.feat{list-style:none;margin:6px 0 0;padding:0;display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.feat li{display:flex;flex-direction:column;gap:2px;padding:12px 14px;border-radius:12px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:var(--hero-muted);font-size:.86rem}
+.feat b{color:var(--hero-ink);font-family:var(--f-display);font-weight:600;font-size:.95rem}
+.login-side{display:grid;place-items:center;background:var(--bg);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:40px}
+.login-card{background:var(--panel);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);padding:30px;max-width:400px;gap:14px}
+.card-title{font-size:1.35rem;margin:0}
+.login-card .mark{margin:0 0 4px;width:72px}
+.login-card .brand{margin:0 0 6px}
+.login-card button.primary{padding:11px 14px;font-size:1rem}
+@media (max-width:860px){
+  #login{grid-template-columns:1fr}
+  .art-in{padding-block:32px 28px;padding-right:max(16px,env(safe-area-inset-right,0px));padding-left:max(16px,env(safe-area-inset-left,0px))}
+  .feat{grid-template-columns:1fr 1fr}
+}
+@media (max-width:480px){.feat{grid-template-columns:1fr}.bench{padding:16px}.pane-head{align-items:flex-start}}
+.credit{margin-top:6px;padding:16px 18px;border-radius:14px;display:flex;flex-direction:column;gap:10px;
+  background:linear-gradient(135deg,rgba(94,234,212,.15),rgba(138,180,255,.10));border:1px solid rgba(94,234,212,.35);box-shadow:inset 0 1px 0 rgba(255,255,255,.08)}
+.credit .eyebrow{color:#99f6e4}
+.credit-team{font-family:var(--f-display);font-weight:700;font-size:1.15rem;line-height:1.25;color:var(--hero-ink);margin-top:-4px}
+.credit-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.crumb{padding:3px 11px;border-radius:99px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);color:var(--hero-ink);font-weight:700;font-size:.8rem}
+.crumb.org{background:rgba(0,174,239,.18);border-color:rgba(0,174,239,.5);color:#8fdcff}
+.sep{color:var(--hero-muted);font-weight:700}
+.person{display:inline-flex;align-items:center;gap:8px;padding:4px 12px 4px 4px;border-radius:99px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.16);color:var(--hero-ink);font-weight:600;font-size:.86rem}
+.person i{font-style:normal;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font-weight:800;font-size:.78rem;color:#04211e;background:linear-gradient(135deg,#5eead4,#8ab4ff)}
+</style>
+
+<section id="login">
+  <div class="login-art">
+    <div class="art-in">
+      <div class="brand"><svg class="brandmark" viewBox="0 0 64 48" aria-hidden="true"><rect x="2" y="6" width="28" height="36" rx="5" fill="var(--src)"/><rect x="34" y="6" width="28" height="36" rx="5" fill="var(--tgt)"/><rect x="8" y="14" width="16" height="3" rx="1.5" fill="var(--panel)"/><rect x="8" y="21" width="12" height="3" rx="1.5" fill="var(--panel)"/><rect x="40" y="14" width="16" height="3" rx="1.5" fill="var(--panel)"/><rect x="40" y="21" width="12" height="3" rx="1.5" fill="var(--panel)"/><circle cx="32" cy="34" r="11" fill="var(--ok)" stroke="var(--panel)" stroke-width="3"/><path d="M26.5 34l4 4 7-8" fill="none" stroke="var(--panel)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg><div class="eyebrow">Data Engineering · Reconciliation</div></div>
+      <h1 class="art-title">Prove what landed<br><span class="grad">matches what was sent.</span></h1>
+      <p class="art-sub">Source Target Recon compares files, schemas, code and JSON across environments, flags every difference and hands you a clean Excel report.</p>
+      <ul class="feat">
+        <li><b>Row by row</b>TRUE / FALSE for every column</li>
+        <li><b>Data quality</b>Null and duplicate checks</li>
+        <li><b>Schema and code</b>DDL, JSON and SQL diffs</li>
+        <li><b>Reports</b>Colored Excel, named your way</li>
+      </ul>
+      <div class="credit" aria-label="Implemented by">
+        <div class="eyebrow">Implemented by</div>
+        <div class="credit-team">Impairments Data Engineering Team</div>
+        <div class="credit-row"><span class="crumb">Impairments Team</span></div>
+        <div class="credit-row"><span class="person"><i>H</i>Harleen</span><span class="person"><i>K</i>Kushal</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="login-side">
+    <form class="login-card" id="loginForm" novalidate>
+      <svg class="mark" viewBox="0 0 64 48" role="img" aria-label="Recon logo"><rect x="2" y="6" width="28" height="36" rx="5" fill="var(--src)"/><rect x="34" y="6" width="28" height="36" rx="5" fill="var(--tgt)"/><rect x="8" y="14" width="16" height="3" rx="1.5" fill="var(--panel)"/><rect x="8" y="21" width="12" height="3" rx="1.5" fill="var(--panel)"/><rect x="40" y="14" width="16" height="3" rx="1.5" fill="var(--panel)"/><rect x="40" y="21" width="12" height="3" rx="1.5" fill="var(--panel)"/><circle cx="32" cy="34" r="11" fill="var(--ok)" stroke="var(--panel)" stroke-width="3"/><path d="M26.5 34l4 4 7-8" fill="none" stroke="var(--panel)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <div class="label">Welcome back</div>
+      <h2 class="card-title">Sign in to Source Target Recon</h2>
+      <div class="field"><label class="label" for="u">Username</label><input type="text" id="u" autocomplete="username" value="admin"></div>
+      <div class="field"><label class="label" for="p">Password</label><input type="password" id="p" autocomplete="current-password" placeholder="demo: admin123"></div>
+      <div class="err" id="loginErr"></div>
+      <button class="primary" type="submit">Sign in</button>
+      <p class="note">Demo login: admin / admin123. The team version uses real accounts on your server.</p>
+    </form>
+  </div>
+</section>
+
+<div id="app" hidden>
+  <header class="hero">
+    <div class="hero-in">
+      <div class="topbar">
+        <div class="brand"><svg class="brandmark" viewBox="0 0 64 48" aria-hidden="true"><rect x="2" y="6" width="28" height="36" rx="5" fill="var(--src)"/><rect x="34" y="6" width="28" height="36" rx="5" fill="var(--tgt)"/><rect x="8" y="14" width="16" height="3" rx="1.5" fill="var(--panel)"/><rect x="8" y="21" width="12" height="3" rx="1.5" fill="var(--panel)"/><rect x="40" y="14" width="16" height="3" rx="1.5" fill="var(--panel)"/><rect x="40" y="21" width="12" height="3" rx="1.5" fill="var(--panel)"/><circle cx="32" cy="34" r="11" fill="var(--ok)" stroke="var(--panel)" stroke-width="3"/><path d="M26.5 34l4 4 7-8" fill="none" stroke="var(--panel)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg><div><div class="eyebrow">Data Engineering · Reconciliation</div><h1>Source <span class="grad">Target</span> Recon</h1></div></div>
+        <div class="who"><span>Signed in as <b id="whoName">admin</b></span><button id="logout" type="button">Sign out</button></div>
+      </div>
+      <p class="tagline">Compare files, schemas, code and JSON across environments. Every difference flagged, every result ready for Excel.</p>
+    <nav class="tabs" role="tablist" aria-label="Tools">
+      <button class="tab" role="tab" id="tab-cmp" aria-selected="true" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="7" height="16" rx="1.5"/><rect x="14" y="4" width="7" height="16" rx="1.5"/><path d="M10 9h4M10 15h4"/></svg><span>Compare records</span></button>
+      <button class="tab" role="tab" id="tab-stat" aria-selected="false" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V11M10 20V5M16 20v-6M21 20H3"/></svg><span>Statistics</span></button>
+      <button class="tab" role="tab" id="tab-dq" aria-selected="false" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6l8-3z"/><path d="M8.5 12l2.5 2.5 4.5-5"/></svg><span>Data quality</span></button>
+      <button class="tab" role="tab" id="tab-code" aria-selected="false" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6l-6 6 6 6M16 6l6 6-6 6M14 4l-4 16"/></svg><span>Code compare</span></button>
+      <button class="tab" role="tab" id="tab-ddl" aria-selected="false" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="5.5" rx="8" ry="3"/><path d="M4 5.5v13c0 1.7 3.6 3 8 3s8-1.3 8-3v-13M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg><span>DDL compare</span></button>
+      <button class="tab" role="tab" id="tab-json" aria-selected="false" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H7a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2 2 2 0 0 1 2 2v4a2 2 0 0 0 2 2h1M16 3h1a2 2 0 0 1 2 2v4a2 2 0 0 0 2 2 2 2 0 0 0-2 2v4a2 2 0 0 1-2 2h-1"/></svg><span>JSON compare</span></button>
+      </nav>
+    </div>
+  </header>
+  <main class="wrap">
+
+  <div class="decks" id="decks">
+    <section class="deck src" id="deck-src">
+      <div class="deck-head"><h2>Source</h2><span class="label">Left</span></div>
+      <label class="drop" id="drop-src"><input type="file" id="file-src" accept=".csv,.xlsx,.xls,.txt,.tsv"><strong>Upload source file</strong><small>CSV, TSV or Excel · click or drop</small></label>
+      <div class="fileinfo" id="info-src"></div>
+      <div class="chips" id="cols-src"></div>
+      <div class="peek" id="peek-src"></div>
+    </section>
+    <section class="deck tgt" id="deck-tgt">
+      <div class="deck-head"><h2>Target</h2><span class="label">Right</span></div>
+      <label class="drop" id="drop-tgt"><input type="file" id="file-tgt" accept=".csv,.xlsx,.xls,.txt,.tsv"><strong>Upload target file</strong><small>CSV, TSV or Excel · click or drop</small></label>
+      <div class="fileinfo" id="info-tgt"></div>
+      <div class="chips" id="cols-tgt"></div>
+      <div class="peek" id="peek-tgt"></div>
+    </section>
+  </div>
+
+  <section class="bench">
+
+    <div id="pane-cmp" class="bench" style="border:0;padding:0">
+      <div class="pane-head"><span class="pane-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="7" height="16" rx="1.5"/><rect x="14" y="4" width="7" height="16" rx="1.5"/><path d="M10 9h4M10 15h4"/></svg></span><div><h2>Compare records</h2><p>Match every row between the source and target files and flag each column TRUE or FALSE.</p></div></div>
+      <div class="controls">
+        <div class="field"><label class="label" for="keySel">Match rows by</label><select id="keySel"></select></div>
+        <label class="check"><input type="checkbox" id="optCase" checked> Ignore case</label>
+        <label class="check"><input type="checkbox" id="optTrim" checked> Trim spaces</label>
+        <label class="check"><input type="checkbox" id="optNum" checked> Numbers by value (1 = 1.0)</label>
+      </div>
+      <div class="actions">
+        <button class="primary" id="btnCompare" type="button">Compare</button>
+        <button id="btnDlCmp" type="button" disabled hidden>Download compared results (.xlsx)</button>
+        <label class="check"><input type="checkbox" id="optOnlyBad"> Show mismatched rows only</label>
+        <span class="toast" id="toastCmp"></span>
+      </div>
+      <div class="summary" id="cmpSummary"></div>
+      <div class="tablebox" id="cmpTable" hidden></div>
+      <div class="note" id="cmpNote"></div>
+    </div>
+
+    <div id="pane-stat" class="bench" style="border:0;padding:0" hidden>
+      <div class="pane-head"><span class="pane-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V11M10 20V5M16 20v-6M21 20H3"/></svg></span><div><h2>Statistics</h2><p>Check totals, averages and counts side by side for every matched column.</p></div></div>
+      <div class="field"><span class="label">Measures</span>
+        <div class="statgrid" id="measures"></div></div>
+      <div class="field"><span class="label">Columns (matched in both files)</span>
+        <div class="statgrid" id="statCols"></div></div>
+      <div class="actions">
+        <button class="primary" id="btnStats" type="button">Calculate</button>
+        <button id="btnDlStat" type="button" disabled hidden>Download statistics (.xlsx)</button>
+        <span class="toast" id="toastStat"></span>
+      </div>
+      <div class="tablebox" id="statTable" hidden></div>
+    </div>
+
+    <div id="pane-dq" class="bench" style="border:0;padding:0" hidden>
+      <div class="pane-head"><span class="pane-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6l8-3z"/><path d="M8.5 12l2.5 2.5 4.5-5"/></svg></span><div><h2>Data quality</h2><p>Find empty required values and duplicate keys in both files.</p></div></div>
+      <div class="dqrule">
+        <div><span class="label">Rule 1</span><h3>Null validation</h3><p class="note">Flags rows where a required column is empty. Example: Customer ID should not be NULL.</p></div>
+        <div class="field"><span class="label">Required columns (must not be null)</span><div class="statgrid" id="dqNullCols"></div></div>
+        <label class="check"><input type="checkbox" id="dqNullText" checked> Also treat the text NULL, None, NaN, N/A as null</label>
+      </div>
+      <div class="dqrule">
+        <div><span class="label">Rule 2</span><h3>Duplicate validation</h3><p class="note">Flags rows that share the same key. Example: the same Invoice ID appears twice. Pick several columns to check a combined key.</p></div>
+        <div class="field"><span class="label">Key columns (must be unique)</span><div class="statgrid" id="dqDupCols"></div></div>
+        <label class="check"><input type="checkbox" id="dqFullRow"> Also flag fully identical rows (all columns the same)</label>
+      </div>
+      <div class="actions">
+        <button class="primary" id="btnDQ" type="button">Run validation</button>
+        <button id="btnDlDQ" type="button" disabled hidden>Download validation report (.xlsx)</button>
+        <span class="toast" id="toastDQ"></span>
+      </div>
+      <div class="summary" id="dqSummary"></div>
+      <div class="tablebox" id="dqSumTable" hidden></div>
+      <div class="field" id="dqDetailWrap" hidden><span class="label">Failed rows</span><div class="tablebox" id="dqDetail"></div></div>
+      <div class="note" id="dqNote"></div>
+    </div>
+
+    <div id="pane-code" class="bench" style="border:0;padding:0" hidden>
+      <div class="pane-head"><span class="pane-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6l-6 6 6 6M16 6l6 6-6 6M14 4l-4 16"/></svg></span><div><h2>Code compare</h2><p>Paste two versions of SQL, HQL, PySpark or any script and see every changed line.</p></div></div>
+      <div class="codepair">
+        <div class="field"><label class="label" for="codeSrc" style="color:var(--src)">Source code</label><textarea id="codeSrc" spellcheck="false" wrap="off"></textarea></div>
+        <div class="field"><label class="label" for="codeTgt" style="color:var(--tgt)">Target code</label><textarea id="codeTgt" spellcheck="false" wrap="off"></textarea></div>
+      </div>
+      <div class="controls">
+        <label class="check"><input type="checkbox" id="cIgnWs"> Ignore spaces and indentation</label>
+        <label class="check"><input type="checkbox" id="cIgnCase"> Ignore case</label>
+        <label class="check"><input type="checkbox" id="cIgnBlank"> Ignore blank lines</label>
+        <label class="check"><input type="checkbox" id="cOnlyDiff"> Show differences only</label>
+      </div>
+      <div class="actions">
+        <button class="primary" id="btnCode" type="button">Compare</button>
+        <button id="btnSwap" type="button">Swap sides</button>
+        <button id="btnClearCode" type="button">Clear</button>
+        <button id="btnDlCode" type="button" disabled hidden>Download</button>
+        <span class="toast" id="toastCode"></span>
+      </div>
+      <div class="summary" id="codeSummary"></div>
+      <div class="tablebox codediff" id="codeOut" hidden></div>
+    </div>
+
+    <div id="pane-ddl" class="bench" style="border:0;padding:0" hidden>
+      <div class="pane-head"><span class="pane-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="5.5" rx="8" ry="3"/><path d="M4 5.5v13c0 1.7 3.6 3 8 3s8-1.3 8-3v-13M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg></span><div><h2>DDL compare</h2><p>Compare CREATE TABLE statements: columns, types, nullability, partitions and storage.</p></div></div>
+      <div class="codepair">
+        <div class="field"><div class="sidehead"><label class="label" for="ddlSrc" style="color:var(--src)">Source DDL</label><label class="filebtn">Load file<input type="file" id="ddlSrcFile" accept=".sql,.hql,.ddl,.txt"></label></div><textarea id="ddlSrc" spellcheck="false" wrap="off" placeholder="Paste one or more CREATE TABLE statements, or drop a .sql / .hql file here"></textarea></div>
+        <div class="field"><div class="sidehead"><label class="label" for="ddlTgt" style="color:var(--tgt)">Target DDL</label><label class="filebtn">Load file<input type="file" id="ddlTgtFile" accept=".sql,.hql,.ddl,.txt"></label></div><textarea id="ddlTgt" spellcheck="false" wrap="off" placeholder="Paste one or more CREATE TABLE statements, or drop a .sql / .hql file here"></textarea></div>
+      </div>
+      <div class="controls">
+        <label class="check"><input type="checkbox" id="ddlCase" checked> Ignore case of names</label>
+        <label class="check"><input type="checkbox" id="ddlSchema" checked> Match tables by name only (ignore schema)</label>
+        <label class="check"><input type="checkbox" id="ddlSyn" checked> Treat type synonyms as equal (INT = INTEGER, NUMERIC = DECIMAL)</label>
+        <label class="check"><input type="checkbox" id="ddlProps" checked> Compare table properties (partitions, format, buckets, TBLPROPERTIES)</label>
+        <label class="check"><input type="checkbox" id="ddlLoc" checked> Ignore LOCATION paths</label>
+        <label class="check"><input type="checkbox" id="ddlOrder"> Flag column order changes</label>
+        <label class="check"><input type="checkbox" id="ddlCmt"> Compare comments</label>
+        <label class="check"><input type="checkbox" id="ddlOnlyDiff"> Show differences only</label>
+      </div>
+      <div class="actions">
+        <button class="primary" id="btnDDL" type="button">Compare DDL</button>
+        <button id="btnDlDDL" type="button" disabled hidden>Download DDL report (.xlsx)</button>
+        <button id="btnSwapDDL" type="button">Swap sides</button>
+        <span class="toast" id="toastDDL"></span>
+      </div>
+      <div class="summary" id="ddlSummary"></div>
+      <div class="tablebox" id="ddlOut" hidden></div>
+      <div class="field" id="ddlPropWrap" hidden><span class="label">Table properties</span><div class="tablebox" id="ddlPropOut"></div></div>
+      <div class="note" id="ddlNote"></div>
+    </div>
+
+    <div id="pane-json" class="bench" style="border:0;padding:0" hidden>
+      <div class="pane-head"><span class="pane-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H7a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2 2 2 0 0 1 2 2v4a2 2 0 0 0 2 2h1M16 3h1a2 2 0 0 1 2 2v4a2 2 0 0 0 2 2 2 2 0 0 0-2 2v4a2 2 0 0 1-2 2h-1"/></svg></span><div><h2>JSON compare</h2><p>Compare two JSON documents path by path, with array order and noisy keys handled.</p></div></div>
+      <div class="codepair">
+        <div class="field"><div class="sidehead"><label class="label" for="jsSrc" style="color:var(--src)">Source JSON</label><label class="filebtn">Load file<input type="file" id="jsSrcFile" accept=".json,.jsonl,.ndjson,.txt"></label></div><textarea id="jsSrc" spellcheck="false" wrap="off" placeholder="Paste JSON, or drop a .json file here"></textarea></div>
+        <div class="field"><div class="sidehead"><label class="label" for="jsTgt" style="color:var(--tgt)">Target JSON</label><label class="filebtn">Load file<input type="file" id="jsTgtFile" accept=".json,.jsonl,.ndjson,.txt"></label></div><textarea id="jsTgt" spellcheck="false" wrap="off" placeholder="Paste JSON, or drop a .json file here"></textarea></div>
+      </div>
+      <div class="controls">
+        <label class="check"><input type="checkbox" id="jsOrder" checked> Ignore array order</label>
+        <div class="field"><label class="label" for="jsKey">Match array items by key</label><input type="text" id="jsKey" placeholder="Auto: id or *_id"></div>
+        <div class="field"><label class="label" for="jsIgnore">Ignore keys</label><input type="text" id="jsIgnore" placeholder="e.g. updated_at, load_ts"></div>
+        <label class="check"><input type="checkbox" id="jsCase"> Ignore case in text values</label>
+        <label class="check"><input type="checkbox" id="jsNumStr"> Treat 1 and "1" as equal</label>
+        <label class="check"><input type="checkbox" id="jsShowSame"> Show unchanged values</label>
+      </div>
+      <div class="actions">
+        <button class="primary" id="btnJSON" type="button">Compare JSON</button>
+        <button id="btnDlJSON" type="button" disabled hidden>Download JSON report (.xlsx)</button>
+        <button id="btnFmtJSON" type="button">Format both</button>
+        <button id="btnSwapJSON" type="button">Swap sides</button>
+        <span class="toast" id="toastJSON"></span>
+      </div>
+      <div class="summary" id="jsSummary"></div>
+      <div class="tablebox" id="jsOut" hidden></div>
+      <div class="note" id="jsNote"></div>
+    </div>
+  </section>
+  <footer class="foot"><span>Source Target Recon · built for the data engineering team</span><span>Files are compared in your browser.</span></footer>
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+<script>
+(function(){
+const $=id=>document.getElementById(id);
+const S={src:null,tgt:null,pairs:[],result:null,stats:null};
+
+/* ---------- login (client-side demo gate) ---------- */
+function enter(name){$('login').hidden=true;$('app').hidden=false;$('whoName').textContent=name;try{sessionStorage.setItem('recon_user',name)}catch(e){}}
+$('loginForm').addEventListener('submit',e=>{e.preventDefault();
+  const u=$('u').value.trim(),p=$('p').value;
+  if(u==='admin'&&p==='admin123'){$('loginErr').textContent='';enter(u)}
+  else $('loginErr').textContent='Username or password is wrong. Use admin / admin123 for the demo.';});
+$('logout').addEventListener('click',()=>{try{sessionStorage.removeItem('recon_user')}catch(e){}$('app').hidden=true;$('login').hidden=false;$('p').value=''});
+try{const u=sessionStorage.getItem('recon_user');if(u)enter(u)}catch(e){}
+
+/* ---------- parsing ---------- */
+const norm=h=>String(h).trim().toLowerCase().replace(/[\s_\-\.]+/g,'');
+function fromAoA(aoa,name){
+  aoa=aoa.filter(r=>r.some(c=>String(c).trim()!==''));
+  if(!aoa.length)throw new Error('The file has no rows.');
+  const headers=aoa[0].map((h,i)=>String(h).trim()||('col'+(i+1)));
+  const rows=aoa.slice(1).map(r=>headers.map((_,i)=>r[i]==null?'':String(r[i])));
+  return {name,headers,rows};
+}
+function readFile(file){
+  return new Promise((res,rej)=>{
+    const fr=new FileReader();
+    fr.onerror=()=>rej(new Error('Could not read the file.'));
+    fr.onload=()=>{try{
+      const wb=XLSX.read(fr.result,{type:'array',raw:false});
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      const aoa=XLSX.utils.sheet_to_json(ws,{header:1,defval:'',raw:false});
+      res(fromAoA(aoa,file.name));
+    }catch(e){rej(new Error('This file could not be parsed. Use CSV or Excel with a header row.'))}};
+    fr.readAsArrayBuffer(file);
+  });
+}
+
+/* ---------- side panels ---------- */
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+function renderSide(side){
+  const d=S[side];if(!d)return;
+  const other=S[side==='src'?'tgt':'src'];
+  const otherSet=other?new Set(other.headers.map(norm)):null;
+  $('info-'+side).innerHTML=`<b>${esc(d.name)}</b> · ${d.rows.length.toLocaleString()} rows · ${d.headers.length} columns`;
+  $('cols-'+side).innerHTML=d.headers.map(h=>`<span class="chip${otherSet&&!otherSet.has(norm(h))?' only':''}" title="${otherSet&&!otherSet.has(norm(h))?'Not found on the other side':''}">${esc(h)}</span>`).join('');
+  const head='<tr>'+d.headers.map(h=>`<th>${esc(h)}</th>`).join('')+'</tr>';
+  const body=d.rows.slice(0,5).map(r=>'<tr>'+r.map(c=>`<td>${esc(c)}</td>`).join('')+'</tr>').join('');
+  $('peek-'+side).innerHTML=`<table>${head}${body}</table>`;
+}
+function pairColumns(){
+  S.pairs=[];if(!S.src||!S.tgt)return;
+  const tmap=new Map();S.tgt.headers.forEach((h,i)=>{if(!tmap.has(norm(h)))tmap.set(norm(h),i)});
+  S.src.headers.forEach((h,i)=>{const j=tmap.get(norm(h));if(j!=null)S.pairs.push({name:h,si:i,ti:j})});
+}
+function refresh(){
+  pairColumns();renderSide('src');renderSide('tgt');
+  const ks=$('keySel'),prev=ks.value;
+  ks.innerHTML='<option value="__pos">Row position (1st with 1st)</option>'+S.pairs.map((p,k)=>`<option value="${k}">Key column: ${esc(p.name)}</option>`).join('');
+  if([...ks.options].some(o=>o.value===prev))ks.value=prev;
+  else{const guess=S.pairs.findIndex(p=>/^(id|key|.*_id|.*id)$/i.test(norm(p.name)));if(guess>=0)ks.value=String(guess)}
+  $('statCols').innerHTML=S.pairs.map((p,k)=>`<label><input type="checkbox" value="${k}" checked> ${esc(p.name)}</label>`).join('');
+  S.result=null;$('btnDlCmp').disabled=true;$('cmpTable').hidden=true;$('cmpSummary').innerHTML='';$('cmpNote').textContent='';
+  S.stats=null;$('btnDlStat').disabled=true;$('statTable').hidden=true;
+  const ac=allCols();const keyIdx=ac.findIndex(c=>/^(id|key|.*id)$/.test(norm(c.name)));
+  const opts=ac.map((c,k)=>`<label title="${c.s<0?'Target only':c.t<0?'Source only':'Both files'}"><input type="checkbox" value="${k}" ${k===keyIdx?'checked':''}> ${esc(c.name)}${c.s<0?' (T)':c.t<0?' (S)':''}</label>`).join('');
+  $('dqNullCols').innerHTML=opts;$('dqDupCols').innerHTML=opts;
+  S.dq=null;$('btnDlDQ').disabled=true;$('dqSumTable').hidden=true;$('dqDetailWrap').hidden=true;$('dqSummary').innerHTML='';$('dqNote').textContent='';
+}
+function wireDrop(side){
+  const input=$('file-'+side),drop=$('drop-'+side);
+  const load=async f=>{if(!f)return;$('info-'+side).textContent='Reading '+f.name+'…';
+    try{S[side]=await readFile(f);refresh()}catch(e){$('info-'+side).innerHTML=`<span style="color:var(--bad)">${esc(e.message)}</span>`}};
+  input.addEventListener('change',()=>load(input.files[0]));
+  ['dragenter','dragover'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('over')}));
+  ['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove('over')}));
+  drop.addEventListener('drop',e=>load(e.dataTransfer.files[0]));
+}
+wireDrop('src');wireDrop('tgt');
+
+/* ---------- compare ---------- */
+function toNum(v){const s=String(v).trim().replace(/,/g,'');if(s===''||!/^[-+]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?$/i.test(s))return null;return Number(s)}
+function same(a,b,o){
+  if(o.trim){a=String(a).trim();b=String(b).trim()}
+  if(o.num){const x=toNum(a),y=toNum(b);if(x!=null&&y!=null)return x===y}
+  if(o.ci){a=String(a).toLowerCase();b=String(b).toLowerCase()}
+  return a===b;
+}
+function compare(){
+  if(!S.src||!S.tgt){toast('toastCmp','Upload both a source and a target file first.',false);return}
+  if(!S.pairs.length){toast('toastCmp','No column names match between the two files.',false);return}
+  const o={ci:$('optCase').checked,trim:$('optTrim').checked,num:$('optNum').checked};
+  const kv=$('keySel').value;let aligned=[];
+  if(kv==='__pos'){
+    const n=Math.max(S.src.rows.length,S.tgt.rows.length);
+    for(let i=0;i<n;i++)aligned.push([S.src.rows[i]||null,S.tgt.rows[i]||null]);
+  }else{
+    const p=S.pairs[+kv];const k=v=>{let s=String(v);if(o.trim)s=s.trim();if(o.ci)s=s.toLowerCase();const x=o.num?toNum(s):null;return x!=null?'#'+x:s};
+    const tm=new Map();S.tgt.rows.forEach(r=>{const kk=k(r[p.ti]);if(!tm.has(kk))tm.set(kk,[]);tm.get(kk).push(r)});
+    S.src.rows.forEach(r=>{const list=tm.get(k(r[p.si]));aligned.push([r,list&&list.length?list.shift():null])});
+    tm.forEach(list=>list.forEach(r=>aligned.push([null,r])));
+  }
+  const header=['row_status'];S.pairs.forEach(p=>header.push(p.name+'_src',p.name+'_tgt',p.name+'_match'));
+  const rows=[];const colBad=S.pairs.map(()=>0);let bothRows=0,goodRows=0,srcOnly=0,tgtOnly=0;
+  aligned.forEach(([a,b])=>{
+    const status=a&&b?'In both':a?'Source only':'Target only';
+    if(a&&b)bothRows++;else if(a)srcOnly++;else tgtOnly++;
+    const r=[status];let rowOk=!!(a&&b);
+    S.pairs.forEach((p,k)=>{const va=a?a[p.si]:'',vb=b?b[p.ti]:'';
+      const m=a&&b?same(va,vb,o):false;if(!m){rowOk=false;if(a&&b)colBad[k]++}
+      r.push(a?va:'(missing)',b?vb:'(missing)',m)});
+    if(rowOk)goodRows++;rows.push(r);
+  });
+  const onlySrcCols=S.src.headers.filter(h=>!S.tgt.headers.some(t=>norm(t)===norm(h)));
+  const onlyTgtCols=S.tgt.headers.filter(h=>!S.src.headers.some(t=>norm(t)===norm(h)));
+  S.result={header,rows,colBad,bothRows,goodRows,srcOnly,tgtOnly,onlySrcCols,onlyTgtCols,keyLabel:$('keySel').selectedOptions[0].text,opts:o};
+  renderResult();$('btnDlCmp').disabled=false;toast('toastCmp','Compared '+rows.length.toLocaleString()+' rows.',true);
+}
+function renderResult(){
+  const R=S.result;if(!R)return;
+  const badRows=R.rows.length-R.goodRows;
+  let h=`<div class="pill"><span>Rows compared</span><b>${R.rows.length.toLocaleString()}</b></div>
+   <div class="pill ok"><span>Fully matched</span><b>${R.goodRows.toLocaleString()}</b></div>
+   <div class="pill ${badRows?'bad':'ok'}"><span>With differences</span><b>${badRows.toLocaleString()}</b></div>`;
+  if(R.srcOnly)h+=`<div class="pill warn"><span>Source only</span><b>${R.srcOnly}</b></div>`;
+  if(R.tgtOnly)h+=`<div class="pill warn"><span>Target only</span><b>${R.tgtOnly}</b></div>`;
+  S.pairs.forEach((p,k)=>{if(R.colBad[k])h+=`<div class="pill bad"><span>${esc(p.name)} mismatches</span><b>${R.colBad[k]}</b></div>`});
+  $('cmpSummary').innerHTML=h;
+  const onlyBad=$('optOnlyBad').checked;
+  const list=R.rows.filter(r=>!onlyBad||r.slice(1).some((v,i)=>i%3===2&&v===false)).slice(0,300);
+  const head='<tr>'+R.header.map(c=>`<th class="${/_src$/.test(c)?'s':/_tgt$/.test(c)?'t':''}">${esc(c)}</th>`).join('')+'</tr>';
+  const body=list.map(r=>{const bad=r.some((v,i)=>i>0&&i%3===0&&v===false);
+    return `<tr class="${bad?'rowbad':''}">`+r.map((v,i)=>{
+      if(i>0&&i%3===0)return `<td class="${v?'T':'F'}">${v?'TRUE':'FALSE'}</td>`;
+      const mi=i>0?(i%3===1?i+2:i+1):-1;const diff=mi>0&&r[mi]===false&&v!=='(missing)';
+      return `<td class="${v==='(missing)'?'miss':diff?'diff':''}">${esc(v)}</td>`}).join('')+'</tr>'}).join('');
+  $('cmpTable').innerHTML=`<table>${head}${body}</table>`;$('cmpTable').hidden=false;
+  const extra=[];if(R.onlySrcCols.length)extra.push('Columns only in source (skipped): '+R.onlySrcCols.join(', '));
+  if(R.onlyTgtCols.length)extra.push('Columns only in target (skipped): '+R.onlyTgtCols.join(', '));
+  if(R.rows.length>300)extra.push('Preview shows the first 300 rows. The download has all of them.');
+  $('cmpNote').textContent=extra.join(' · ');
+}
+$('btnCompare').addEventListener('click',compare);
+$('optOnlyBad').addEventListener('change',renderResult);
+
+/* ---------- statistics ---------- */
+const MEASURES=[['count','Row count'],['nonnull','Non-empty'],['nulls','Empty'],['distinct','Distinct'],['sum','Sum'],['mean','Mean'],['median','Median'],['min','Min'],['max','Max'],['stdev','Std dev']];
+$('measures').innerHTML=MEASURES.map(([k,l])=>`<label><input type="checkbox" value="${k}" ${['count','sum','mean','median','min','max'].includes(k)?'checked':''}> ${l}</label>`).join('');
+function stat(vals,m){
+  const nonEmpty=vals.filter(v=>String(v).trim()!=='');const nums=nonEmpty.map(toNum).filter(v=>v!=null).sort((a,b)=>a-b);
+  const sum=nums.reduce((a,b)=>a+b,0);
+  switch(m){case'count':return vals.length;case'nonnull':return nonEmpty.length;case'nulls':return vals.length-nonEmpty.length;
+    case'distinct':return new Set(nonEmpty.map(v=>String(v).trim())).size;
+    case'sum':return nums.length?round(sum):null;case'mean':return nums.length?round(sum/nums.length):null;
+    case'median':{if(!nums.length)return null;const h=nums.length>>1;return round(nums.length%2?nums[h]:(nums[h-1]+nums[h])/2)}
+    case'min':return nums.length?nums[0]:null;case'max':return nums.length?nums[nums.length-1]:null;
+    case'stdev':{if(nums.length<2)return null;const mu=sum/nums.length;return round(Math.sqrt(nums.reduce((a,b)=>a+(b-mu)**2,0)/(nums.length-1)))}}
+}
+const round=x=>Math.round(x*1e6)/1e6;
+function calcStats(){
+  if(!S.src||!S.tgt){toast('toastStat','Upload both files first.',false);return}
+  const ms=[...$('measures').querySelectorAll('input:checked')].map(i=>i.value);
+  const cs=[...$('statCols').querySelectorAll('input:checked')].map(i=>S.pairs[+i.value]);
+  if(!ms.length||!cs.length){toast('toastStat','Pick at least one measure and one column.',false);return}
+  const header=['column','measure','source','target','difference','match'];const rows=[];
+  cs.forEach(p=>ms.forEach(m=>{
+    const a=stat(S.src.rows.map(r=>r[p.si]),m),b=stat(S.tgt.rows.map(r=>r[p.ti]),m);
+    const diff=a!=null&&b!=null?round(b-a):null;
+    rows.push([p.name,MEASURES.find(x=>x[0]===m)[1],a??'n/a (not numeric)',b??'n/a (not numeric)',diff??'',a!=null&&b!=null?a===b:(a==null&&b==null)])}));
+  S.stats={header,rows};
+  const head='<tr>'+header.map(h=>`<th class="${h==='source'?'s':h==='target'?'t':''}">${h}</th>`).join('')+'</tr>';
+  $('statTable').innerHTML=`<table class="colstats">${head}${rows.map(r=>'<tr>'+r.map((v,i)=>i===5?`<td class="${v?'T':'F'}">${v?'TRUE':'FALSE'}</td>`:`<td>${esc(typeof v==='number'?v.toLocaleString(undefined,{maximumFractionDigits:6}):v)}</td>`).join('')+'</tr>').join('')}</table>`;
+  $('statTable').hidden=false;$('btnDlStat').disabled=false;toast('toastStat','Calculated '+rows.length+' figures.',true);
+}
+$('btnStats').addEventListener('click',calcStats);
+
+/* ---------- tabs ---------- */
+function tab(which){['cmp','stat','dq','code','ddl','json'].forEach(t=>{$('tab-'+t).setAttribute('aria-selected',which===t);$('pane-'+t).hidden=which!==t});syncDecks(which)}
+['cmp','stat','dq','code','ddl','json'].forEach(t=>$('tab-'+t).addEventListener('click',()=>tab(t)));
+
+/* ---------- data quality ---------- */
+function allCols(){
+  const out=[],seen=new Map();
+  if(S.src)S.src.headers.forEach((h,i)=>{const n=norm(h);if(!seen.has(n)){seen.set(n,out.length);out.push({name:h,s:i,t:-1})}});
+  if(S.tgt)S.tgt.headers.forEach((h,i)=>{const n=norm(h);if(seen.has(n)){const c=out[seen.get(n)];if(c.t<0)c.t=i}else{seen.set(n,out.length);out.push({name:h,s:-1,t:i})}});
+  return out;
+}
+function isNull(v,txt){const s=String(v??'').trim();return s===''||(txt&&/^(null|none|nan|n\/a|na|nil|undefined)$/i.test(s))}
+function runDQ(){
+  if(!S.src||!S.tgt){toast('toastDQ','Upload both a source and a target file first.',false);return}
+  const ac=allCols();
+  const nullSel=[...$('dqNullCols').querySelectorAll('input:checked')].map(i=>ac[+i.value]);
+  const dupSel=[...$('dqDupCols').querySelectorAll('input:checked')].map(i=>ac[+i.value]);
+  const fullRow=$('dqFullRow').checked,txt=$('dqNullText').checked,ci=$('optCase').checked;
+  if(!nullSel.length&&!dupSel.length&&!fullRow){toast('toastDQ','Pick at least one column for a rule.',false);return}
+  const sumH=['check','side','columns','rows_checked','failed_rows','status'];
+  const detH=['check','side','columns','file_row','value','occurrences','record'];
+  const sum=[],det=[];
+  const rec=(d,r)=>d.headers.map((h,i)=>h+'='+r[i]).join(' | ');
+  [['Source',S.src,'s'],['Target',S.tgt,'t']].forEach(([side,d,k])=>{
+    nullSel.forEach(c=>{const i=c[k];
+      if(i<0){sum.push(['Null',side,c.name,d.rows.length,'','NOT IN FILE']);return}
+      let n=0;d.rows.forEach((r,ri)=>{if(isNull(r[i],txt)){n++;det.push(['Null',side,c.name,ri+2,r[i]===''?'(empty)':r[i],'',rec(d,r)])}});
+      sum.push(['Null',side,c.name,d.rows.length,n,n?'FAIL':'PASS'])});
+    const dupRule=(label,idx,colLabel)=>{
+      if(idx.some(i=>i<0)){sum.push([label,side,colLabel,d.rows.length,'','NOT IN FILE']);return}
+      const g=new Map();
+      d.rows.forEach((r,ri)=>{const parts=idx.map(i=>String(r[i]).trim());if(parts.every(p=>isNull(p,txt)))return;
+        const key=parts.map(p=>ci?p.toLowerCase():p).join('\u0001');if(!g.has(key))g.set(key,[]);g.get(key).push(ri)});
+      let n=0;g.forEach(list=>{if(list.length>1){n+=list.length;list.forEach(ri=>det.push([label,side,colLabel,ri+2,idx.map(i=>d.rows[ri][i]).join(' + '),list.length,rec(d,d.rows[ri])]))}});
+      sum.push([label,side,colLabel,d.rows.length,n,n?'FAIL':'PASS'])};
+    if(dupSel.length)dupRule('Duplicate',dupSel.map(c=>c[k]),dupSel.map(c=>c.name).join(' + '));
+    if(fullRow)dupRule('Duplicate row',d.headers.map((_,i)=>i),'all columns');
+  });
+  S.dq={sumH,sum,detH,det};renderDQ();$('btnDlDQ').disabled=false;
+  const fails=sum.filter(r=>r[5]==='FAIL').length;
+  toast('toastDQ',fails?fails+' check'+(fails>1?'s':'')+' failed.':'All checks passed.',!fails);
+}
+function renderDQ(){
+  const D=S.dq;if(!D)return;
+  const pass=D.sum.filter(r=>r[5]==='PASS').length,fail=D.sum.filter(r=>r[5]==='FAIL').length;
+  const nulls=D.det.filter(r=>r[0]==='Null').length,dups=D.det.filter(r=>r[0]!=='Null').length;
+  $('dqSummary').innerHTML=`<div class="pill ok"><span>Checks passed</span><b>${pass}</b></div><div class="pill ${fail?'bad':'ok'}"><span>Checks failed</span><b>${fail}</b></div><div class="pill ${nulls?'bad':'ok'}"><span>Null values</span><b>${nulls}</b></div><div class="pill ${dups?'bad':'ok'}"><span>Duplicate rows</span><b>${dups}</b></div>`;
+  const tbl=(h,rows,st)=>'<table><tr>'+h.map(x=>`<th>${x}</th>`).join('')+'</tr>'+rows.map(r=>'<tr>'+r.map((v,i)=>i===st?`<td class="${v==='PASS'?'T':v==='FAIL'?'F':'miss'}">${esc(v)}</td>`:`<td class="${h[i]==='side'?(v==='Source'?'sideS':'sideT'):''}">${esc(v)}</td>`).join('')+'</tr>').join('')+'</table>';
+  $('dqSumTable').innerHTML=tbl(D.sumH,D.sum,5);$('dqSumTable').hidden=false;
+  $('dqDetail').innerHTML=D.det.length?tbl(D.detH,D.det.slice(0,300),-1):'<p class="note" style="padding:10px;margin:0">No failed rows.</p>';
+  $('dqDetailWrap').hidden=false;
+  $('dqNote').textContent=(D.det.length>300?'Showing the first 300 failed rows. The download has all of them. ':'')+'file_row is the row number in the uploaded file, counting the header as row 1.';
+}
+$('btnDQ').addEventListener('click',runDQ);
+
+/* ---------- code compare ---------- */
+function diffLines(A,B,keyA,keyB){
+  // trim common head/tail, then LCS on the middle
+  let h=0;while(h<A.length&&h<B.length&&keyA[h]===keyB[h])h++;
+  let t=0;while(t<A.length-h&&t<B.length-h&&keyA[A.length-1-t]===keyB[B.length-1-t])t++;
+  const a=keyA.slice(h,A.length-t),b=keyB.slice(h,B.length-t),n=a.length,m=b.length;
+  const ops=[];for(let i=0;i<h;i++)ops.push(['=',i,i]);
+  if(n*m>16e6){ // too large for LCS: mark middle as replaced
+    for(let i=0;i<n;i++)ops.push(['-',h+i,-1]);for(let j=0;j<m;j++)ops.push(['+',-1,h+j]);
+  }else{
+    const W=m+1,L=new Uint32Array((n+1)*W);
+    for(let i=n-1;i>=0;i--)for(let j=m-1;j>=0;j--)L[i*W+j]=a[i]===b[j]?L[(i+1)*W+j+1]+1:Math.max(L[(i+1)*W+j],L[i*W+j+1]);
+    let i=0,j=0;
+    while(i<n&&j<m){if(a[i]===b[j]){ops.push(['=',h+i,h+j]);i++;j++}else if(L[(i+1)*W+j]>=L[i*W+j+1]){ops.push(['-',h+i,-1]);i++}else{ops.push(['+',-1,h+j]);j++}}
+    while(i<n){ops.push(['-',h+i,-1]);i++}while(j<m){ops.push(['+',-1,h+j]);j++}
+  }
+  for(let k=0;k<t;k++)ops.push(['=',A.length-t+k,B.length-t+k]);
+  // pair runs of deletes and adds into changed lines
+  const rows=[];let k=0;
+  while(k<ops.length){
+    if(ops[k][0]==='='){rows.push({type:'same',l:ops[k][1],r:ops[k][2]});k++;continue}
+    const dels=[],adds=[];while(k<ops.length&&ops[k][0]!=='='){(ops[k][0]==='-'?dels:adds).push(ops[k][0]==='-'?ops[k][1]:ops[k][2]);k++}
+    const p=Math.max(dels.length,adds.length);
+    for(let x=0;x<p;x++){const l=dels[x]??-1,r=adds[x]??-1;rows.push({type:l>=0&&r>=0?'chg':l>=0?'del':'add',l,r})}
+  }
+  return rows;
+}
+function inlineMark(x,y){
+  let p=0;while(p<x.length&&p<y.length&&x[p]===y[p])p++;
+  let q=0;while(q<x.length-p&&q<y.length-p&&x[x.length-1-q]===y[y.length-1-q])q++;
+  const f=(s)=>esc(s.slice(0,p))+(s.length-q>p?'<mark>'+esc(s.slice(p,s.length-q))+'</mark>':'')+esc(s.slice(s.length-q));
+  return [f(x),f(y)];
+}
+function compareCode(){
+  const rawA=$('codeSrc').value,rawB=$('codeTgt').value;
+  if(!rawA.trim()&&!rawB.trim()){toast('toastCode','Paste code on both sides first.',false);return}
+  const ws=$('cIgnWs').checked,ci=$('cIgnCase').checked,nb=$('cIgnBlank').checked;
+  const prep=raw=>{let lines=raw.replace(/\r\n?/g,'\n').split('\n').map((t,i)=>({t,n:i+1}));if(nb)lines=lines.filter(o=>o.t.trim()!=='');return lines};
+  const A=prep(rawA),B=prep(rawB);
+  const key=o=>{let s=o.t;if(ws)s=s.replace(/\s+/g,'');if(ci)s=s.toLowerCase();return s};
+  const rows=diffLines(A,B,A.map(key),B.map(key));
+  let same=0,chg=0,del=0,add=0;rows.forEach(r=>r.type==='same'?same++:r.type==='chg'?chg++:r.type==='del'?del++:add++);S.code={rows,A,B,counts:{same,chg,del,add}};$('btnDlCode').disabled=false;
+  $('codeSummary').innerHTML=`<div class="pill ${chg+del+add?'bad':'ok'}"><span>Result</span><b>${chg+del+add?'Different':'Identical'}</b></div>
+    <div class="pill"><span>Same lines</span><b>${same}</b></div><div class="pill warn"><span>Changed</span><b>${chg}</b></div>
+    <div class="pill bad"><span>Only in source</span><b>${del}</b></div><div class="pill ok"><span>Only in target</span><b>${add}</b></div>`;
+  const only=$('cOnlyDiff').checked;let html='<table><colgroup><col style="width:46px"><col><col style="width:6px"><col style="width:46px"><col></colgroup>';
+  const CTX=3;const isD=rows.map(r=>r.type!=='same');let skip=0;
+  const flush=()=>{if(skip){html+=`<tr class="fold"><td colspan="5">${skip} unchanged line${skip>1?'s':''} hidden</td></tr>`;skip=0}};
+  rows.forEach((r,i)=>{
+    if(only&&r.type==='same'){let near=false;for(let d=-CTX;d<=CTX;d++)if(isD[i+d])near=true;if(!near){skip++;return}}
+    flush();
+    const L=r.l>=0?A[r.l]:null,R=r.r>=0?B[r.r]:null;
+    let lt=L?esc(L.t):'',rt=R?esc(R.t):'';
+    if(r.type==='chg')[lt,rt]=inlineMark(L.t,R.t);
+    html+=`<tr class="${r.type}"><td class="ln">${L?L.n:''}</td><td class="l${L?'':' empty'}">${lt}</td><td class="gap"></td><td class="ln">${R?R.n:''}</td><td class="r${R?'':' empty'}">${rt}</td></tr>`;
+  });
+  flush();html+='</table>';
+  $('codeOut').innerHTML=html;$('codeOut').hidden=false;
+  toast('toastCode',chg+del+add?`Found ${chg+del+add} differing line${chg+del+add>1?'s':''}.`:'The two sides are identical.',!(chg+del+add));
+}
+$('btnCode').addEventListener('click',compareCode);
+['cIgnWs','cIgnCase','cIgnBlank','cOnlyDiff'].forEach(id=>$(id).addEventListener('change',()=>{if(!$('codeOut').hidden)compareCode()}));
+$('btnSwap').addEventListener('click',()=>{const a=$('codeSrc').value;$('codeSrc').value=$('codeTgt').value;$('codeTgt').value=a;if(!$('codeOut').hidden)compareCode()});
+$('btnClearCode').addEventListener('click',()=>{S.code=null;$('btnDlCode').disabled=true;$('codeSrc').value='';$('codeTgt').value='';$('codeOut').hidden=true;$('codeSummary').innerHTML='';$('toastCode').textContent=''});
+$('codeSrc').value=`-- Example: daily customer load (source)
+SELECT c.customer_id,
+       c.name,
+       c.village,
+       SUM(i.amount) AS total_amount
+FROM   stg.customers c
+JOIN   stg.invoices  i ON i.customer_id = c.customer_id
+WHERE  i.load_date = '2026-10-19'
+GROUP BY c.customer_id, c.name, c.village;`;
+$('codeTgt').value=`-- Example: daily customer load (target)
+SELECT c.customer_id,
+       c.name,
+       c.village,
+       SUM(i.amount) AS total_amount,
+       COUNT(i.invoice_id) AS invoice_count
+FROM   dwh.customers c
+JOIN   dwh.invoices  i ON i.customer_id = c.customer_id
+WHERE  i.load_date = '2026-10-19'
+GROUP BY c.customer_id, c.name, c.village;`;
+$('btnDlDQ').addEventListener('click',()=>{
+  if(!S.dq)return;const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,sheet([S.dq.sumH,...S.dq.sum]),'DQ Summary');
+  XLSX.utils.book_append_sheet(wb,sheet([S.dq.detH,...S.dq.det],[{wch:14},{wch:10},{wch:20},{wch:10},{wch:18},{wch:12},{wch:80}]),'DQ Details');
+  saveWb(wb,'validation_report_'+stamp()+'.xlsx','toastDQ');
+});
+
+/* ---------- shared: load a text file into a textarea ---------- */
+function wireText(taId,fileId){
+  const ta=$(taId),inp=$(fileId);
+  const load=f=>{if(!f)return;const fr=new FileReader();fr.onload=()=>{ta.value=String(fr.result)};fr.readAsText(f)};
+  inp.addEventListener('change',()=>{load(inp.files[0]);inp.value=''});
+  ta.addEventListener('dragover',e=>{e.preventDefault();ta.classList.add('over')});
+  ta.addEventListener('dragleave',()=>ta.classList.remove('over'));
+  ta.addEventListener('drop',e=>{if(e.dataTransfer&&e.dataTransfer.files.length){e.preventDefault();ta.classList.remove('over');load(e.dataTransfer.files[0])}});
+}
+const stCls=v=>v==='Same'?'st-same':/only in source|removed/i.test(v)?'st-src':/only in target|added/i.test(v)?'st-tgt':'st-diff';
+const cut=(s,n)=>{s=String(s);return s.length>n?s.slice(0,n)+'…':s};
+
+/* ---------- DDL compare ---------- */
+const IDP='(?:`[^`]+`|"[^"]+"|\\[[^\\]]+\\]|[\\w$#@]+)';
+const IDENT_RE=new RegExp('^\\s*('+IDP+'(?:\\s*\\.\\s*'+IDP+')*)');
+const IDENT_ONE=new RegExp('^\\s*('+IDP+')');
+const unq=s=>(s.match(new RegExp(IDP,'g'))||[]).map(p=>p.replace(/^[`"\[]|[`"\]]$/g,'')).join('.');
+const CREATE_RE=/^\s*CREATE\s+(?:OR\s+REPLACE\s+)?(?:(?:GLOBAL|LOCAL)\s+)?(?:(?:TEMPORARY|TEMP|EXTERNAL|TRANSIENT|VOLATILE|MULTISET|SET|UNLOGGED)\s+)*TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?/i;
+const CONSTRAINT_RE=/^\s*(CONSTRAINT\b|PRIMARY\s+KEY\b|FOREIGN\s+KEY\b|UNIQUE\b|CHECK\b|INDEX\b|KEY\b|PERIOD\s+FOR\b|LIKE\b)/i;
+const ATTR_RE=/^(NOT\s+NULL|NULL|DEFAULT|COMMENT|PRIMARY\s+KEY|REFERENCES|CONSTRAINT|UNIQUE|CHECK|GENERATED|IDENTITY|AUTO_INCREMENT|AUTOINCREMENT|COLLATE|ENCODE|CHARACTER\s+SET|CHARSET|ON\s+UPDATE|WITH\s+DEFAULT|MASKING)\b/i;
+
+function stripSqlComments(sql){
+  let out='',i=0,q=null;
+  while(i<sql.length){
+    const c=sql[i],n=sql[i+1];
+    if(q){out+=c;if(c==='\\'&&q!=='`'){out+=n||'';i+=2;continue}if(c===q)q=null;i++;continue}
+    if(c==="'"||c==='"'||c==='`'){q=c;out+=c;i++;continue}
+    if(c==='-'&&n==='-'){while(i<sql.length&&sql[i]!=='\n')i++;continue}
+    if(c==='/'&&n==='*'){const e=sql.indexOf('*/',i+2);i=e<0?sql.length:e+2;out+=' ';continue}
+    out+=c;i++;
+  }
+  return out;
+}
+function splitTop(str,sep){
+  const parts=[];let depth=0,ang=0,q=null,start=0;
+  for(let i=0;i<str.length;i++){const c=str[i];
+    if(q){if(c==='\\'&&q!=='`'){i++;continue}if(c===q)q=null;continue}
+    if(c==="'"||c==='"'||c==='`'){q=c;continue}
+    if(c==='(')depth++;else if(c===')')depth=Math.max(0,depth-1);
+    else if(c==='<'&&/(array|map|struct|uniontype)\s*$/i.test(str.slice(Math.max(0,i-12),i)))ang++;
+    else if(c==='>'&&ang>0)ang--;
+    else if(c===sep&&depth===0&&ang===0){parts.push(str.slice(start,i));start=i+1}
+  }
+  parts.push(str.slice(start));return parts.map(s=>s.trim()).filter(Boolean);
+}
+function matchParen(s,i){let d=0,q=null;for(let k=i;k<s.length;k++){const c=s[k];if(q){if(c==='\\'&&q!=='`'){k++;continue}if(c===q)q=null;continue}if(c==="'"||c==='"'||c==='`'){q=c;continue}if(c==='(')d++;else if(c===')'){d--;if(d===0)return k}}return -1}
+function parseColumn(item){
+  const im=item.match(IDENT_ONE);if(!im)return null;
+  const name=unq(im[1]),rest=item.slice(im[0].length);
+  let end=rest.length,d=0,ang=0,q=null;
+  for(let i=0;i<rest.length;i++){const c=rest[i];
+    if(q){if(c==='\\'){i++;continue}if(c===q)q=null;continue}
+    if(c==="'"||c==='"'||c==='`'){q=c;continue}
+    if(c==='(')d++;else if(c===')')d--;else if(c==='<')ang++;else if(c==='>'&&ang>0)ang--;
+    else if(d===0&&ang===0&&(i===0||/\s/.test(rest[i-1]))&&ATTR_RE.test(rest.slice(i))){end=i;break}
+  }
+  const type=rest.slice(0,end).trim(),attrs=rest.slice(end);
+  const def=attrs.match(/\bDEFAULT\s+('(?:[^'\\]|\\.|'')*'|\((?:[^()]|\([^()]*\))*\)|[^\s,]+(?:\s*\([^)]*\))?)/i);
+  const cm=attrs.match(/\bCOMMENT\s+'((?:[^'\\]|\\.|'')*)'/i);
+  return {name,type,nullable:/\bNOT\s+NULL\b/i.test(attrs)?'NO':'YES',def:def?def[1]:'',comment:cm?cm[1]:'',pk:/\bPRIMARY\s+KEY\b/i.test(attrs),partition:false};
+}
+function parseTail(tail,t){
+  const P=t.props;
+  const cm=tail.match(/^\s*COMMENT\s+'((?:[^'\\]|\\.|'')*)'/i);if(cm)P['Table comment']=cm[1];
+  const pb=tail.search(/PARTITIONED\s+BY\s*\(/i);
+  if(pb>=0){const o=tail.indexOf('(',pb),e=matchParen(tail,o);if(e>0){const names=[];
+    splitTop(tail.slice(o+1,e),',').forEach(it=>{const c=parseColumn(it);if(!c)return;names.push(c.name);
+      const ex=t.cols.find(x=>x.name.toLowerCase()===c.name.toLowerCase());
+      if(ex)ex.partition=true;else if(c.type){c.partition=true;c.pos=t.cols.length+1;t.cols.push(c)}});
+    P['Partitioned by']=names.join(', ')}}
+  const cb=tail.match(/CLUSTERED\s+BY\s*\(([^)]*)\)(?:\s*SORTED\s+BY\s*\(([^)]*)\))?\s*INTO\s+(\d+)\s+BUCKETS/i);
+  if(cb)P['Clustered by']=cb[1].replace(/\s+/g,' ').trim()+(cb[2]?' sorted by '+cb[2].replace(/\s+/g,' ').trim():'')+' into '+cb[3]+' buckets';
+  const st=tail.match(/STORED\s+AS\s+(?:INPUTFORMAT\s+'([^']*)'|(\w+))/i);if(st)P['Stored as']=(st[2]||st[1]).toUpperCase();
+  const us=tail.match(/\bUSING\s+(\w+)/i);if(us)P['Format (USING)']=us[1].toUpperCase();
+  const rf=tail.match(/ROW\s+FORMAT\s+SERDE\s+'([^']*)'/i);if(rf)P['Row format SerDe']=rf[1];
+  const ft=tail.match(/FIELDS\s+TERMINATED\s+BY\s+'((?:[^'\\]|\\.)*)'/i);if(ft)P['Field delimiter']=ft[1];
+  const lt=tail.match(/LINES\s+TERMINATED\s+BY\s+'((?:[^'\\]|\\.)*)'/i);if(lt)P['Line delimiter']=lt[1];
+  const lo=tail.match(/\bLOCATION\s+'([^']*)'/i);if(lo)P['Location']=lo[1];
+  const tp=tail.search(/TBLPROPERTIES\s*\(/i);
+  if(tp>=0){const o=tail.indexOf('(',tp),e=matchParen(tail,o);if(e>0)splitTop(tail.slice(o+1,e),',').forEach(kv=>{const m=kv.match(/^\s*['"]([^'"]+)['"]\s*=\s*['"]?([^'"]*)['"]?\s*$/);if(m)P['TBLPROPERTIES '+m[1]]=m[2]})}
+  const en=tail.match(/\bENGINE\s*=\s*(\w+)/i);if(en)P['Engine']=en[1];
+  const di=tail.match(/DISTRIBUTED\s+BY\s*(?:HASH\s*)?\(([^)]*)\)/i);if(di)P['Distributed by']=di[1].replace(/\s+/g,'');
+  const pi=tail.match(/PRIMARY\s+INDEX\s*\w*\s*\(([^)]*)\)/i);if(pi)P['Primary index']=pi[1].replace(/\s+/g,'');
+}
+function parseDDL(text){
+  const sql=stripSqlComments(text).replace(/(^|\n)(\s*CREATE\s)/gi,'$1;$2'),tables=[],notes=[];
+  splitTop(sql,';').forEach(stmt=>{
+    const m=stmt.match(CREATE_RE);
+    if(!m){if(/^\s*CREATE\s+(OR\s+REPLACE\s+)?(MATERIALIZED\s+)?VIEW/i.test(stmt))notes.push('Views are skipped; only CREATE TABLE statements are compared.');return}
+    let rest=stmt.slice(m[0].length);const im=rest.match(IDENT_RE);if(!im)return;
+    const full=unq(im[1]);rest=rest.slice(im[0].length);
+    const t={name:full,short:full.split('.').pop(),cols:[],props:{},pk:[]};
+    const first=rest.search(/\S/);
+    if(first<0||rest[first]!=='('){
+      const p=rest.indexOf('(');
+      if(p<0||/^\s*(AS\b|LIKE\b|CLONE\b)/i.test(rest)){notes.push(full+' has no column list (CREATE TABLE AS / LIKE), so only its properties are compared.');parseTail(rest,t);tables.push(t);return}
+      rest=rest.slice(p);
+    }else rest=rest.slice(first);
+    const close=matchParen(rest,0);
+    if(close<0){notes.push('Could not find the end of the column list for '+full+'. Check for a missing bracket.');return}
+    splitTop(rest.slice(1,close),',').forEach(item=>{
+      if(CONSTRAINT_RE.test(item)){const pk=item.match(/PRIMARY\s+KEY\s*(?:CLUSTERED|NONCLUSTERED)?\s*\(([^)]*)\)/i);if(pk)t.pk=pk[1].split(',').map(x=>unq(x.trim().split(/\s+/)[0]));return}
+      const c=parseColumn(item);if(c){c.pos=t.cols.length+1;t.cols.push(c);if(c.pk)t.pk.push(c.name)}
+    });
+    parseTail(rest.slice(close+1),t);
+    if(t.pk.length){t.props['Primary key']=t.pk.join(', ');t.cols.forEach(c=>{if(t.pk.some(p=>p.toLowerCase()===c.name.toLowerCase()))c.nullable='NO'})}
+    tables.push(t);
+  });
+  return {tables,notes};
+}
+const TYPE_SYN=[[/^INTEGER\b/,'INT'],[/^INT4\b/,'INT'],[/^INT8\b/,'BIGINT'],[/^INT2\b/,'SMALLINT'],[/^NUMERIC\b/,'DECIMAL'],[/^DEC\b/,'DECIMAL'],[/^NUMBER\b/,'DECIMAL'],[/^CHARACTER VARYING\b/,'VARCHAR'],[/^VARCHAR2\b/,'VARCHAR'],[/^NVARCHAR2\b/,'NVARCHAR'],[/^CHARACTER\b/,'CHAR'],[/^BOOL\b/,'BOOLEAN'],[/^DOUBLE PRECISION\b/,'DOUBLE'],[/^FLOAT8\b/,'DOUBLE'],[/^FLOAT4\b/,'REAL'],[/^TIMESTAMP WITHOUT TIME ZONE\b/,'TIMESTAMP'],[/^TIMESTAMPTZ\b/,'TIMESTAMP WITH TIME ZONE']];
+function normType(t,syn){
+  let s=String(t).toUpperCase().replace(/\s+/g,' ').replace(/\s*([(),<>:])\s*/g,'$1').trim();
+  if(syn)for(const [re,to] of TYPE_SYN)if(re.test(s)){s=s.replace(re,to);break}
+  return s;
+}
+function normDef(v){let s=String(v||'').trim();while(/^\(.*\)$/.test(s)&&matchParen(s,0)===s.length-1)s=s.slice(1,-1).trim();return /^'/.test(s)?s:s.toUpperCase()}
+function compareDDL(){
+  const ta=$('ddlSrc').value,tb=$('ddlTgt').value;
+  if(!ta.trim()||!tb.trim()){toast('toastDDL','Paste DDL on both sides first.',false);return false}
+  const o={ci:$('ddlCase').checked,schema:$('ddlSchema').checked,syn:$('ddlSyn').checked,order:$('ddlOrder').checked,props:$('ddlProps').checked,loc:$('ddlLoc').checked,cmt:$('ddlCmt').checked};
+  const A=parseDDL(ta),B=parseDDL(tb);
+  if(!A.tables.length){toast('toastDDL','No CREATE TABLE statement found in the source DDL.',false);return false}
+  if(!B.tables.length){toast('toastDDL','No CREATE TABLE statement found in the target DDL.',false);return false}
+  const nk=s=>o.ci?String(s).toLowerCase():String(s),tkey=t=>nk(o.schema?t.short:t.name);
+  const mb=new Map();B.tables.forEach(t=>{const k=tkey(t);if(!mb.has(k))mb.set(k,t)});
+  const pairs=[],usedB=new Set(),leftA=[];
+  A.tables.forEach(t=>{const u=mb.get(tkey(t));if(u&&!usedB.has(u)){usedB.add(u);pairs.push([t,u])}else leftA.push(t)});
+  let leftB=B.tables.filter(t=>!usedB.has(t));
+  const notes=[...new Set([...A.notes,...B.notes])];
+  if(leftA.length===1&&leftB.length===1){pairs.push([leftA[0],leftB[0]]);notes.push(`Paired ${leftA[0].name} with ${leftB[0].name} because they are the only unmatched tables on each side.`);leftA.length=0;leftB=[]}
+  const header=['table','column','position_src','position_tgt','type_src','type_tgt','nullable_src','nullable_tgt','default_src','default_tgt','ddl_status','detail'];
+  const rows=[],props=[],cnt={tables:pairs.length,same:0,diff:0,src:0,tgt:0,props:0,tblSrc:leftA.length,tblTgt:leftB.length};
+  const normProp=v=>{const s=String(v).trim().replace(/\s+/g,' ');return o.ci?s.toLowerCase():s};
+  pairs.forEach(([a,b])=>{
+    const tl=nk(a.name)===nk(b.name)?a.name:a.name+' ↔ '+b.name;
+    const bm=new Map();b.cols.forEach(c=>bm.set(nk(c.name),c));const seen=new Set();
+    a.cols.forEach(c=>{const d=bm.get(nk(c.name));
+      if(!d){rows.push([tl,c.name,c.pos,'',c.type,'',c.nullable,'',c.def,'','Only in source',c.partition?'partition column':'']);cnt.src++;return}
+      seen.add(nk(c.name));const why=[];
+      if(normType(c.type,o.syn)!==normType(d.type,o.syn))why.push(`type ${c.type||'(none)'} → ${d.type||'(none)'}`);
+      if(c.nullable!==d.nullable)why.push(`nullable ${c.nullable} → ${d.nullable}`);
+      if(normDef(c.def)!==normDef(d.def))why.push(`default ${c.def||'(none)'} → ${d.def||'(none)'}`);
+      if(c.partition!==d.partition)why.push(c.partition?'partition column only in source':'partition column only in target');
+      if(o.cmt&&c.comment!==d.comment)why.push('comment differs');
+      if(o.order&&c.pos!==d.pos)why.push(`position ${c.pos} → ${d.pos}`);
+      rows.push([tl,c.name,c.pos,d.pos,c.type,d.type,c.nullable,d.nullable,c.def,d.def,why.length?'Different':'Same',why.join('; ')]);
+      if(why.length)cnt.diff++;else cnt.same++;
+    });
+    b.cols.forEach(d=>{if(seen.has(nk(d.name)))return;rows.push([tl,d.name,'',d.pos,'',d.type,'',d.nullable,'',d.def,'Only in target',d.partition?'partition column':'']);cnt.tgt++});
+    if(o.props){
+      const keys=[...new Set([...Object.keys(a.props),...Object.keys(b.props)])].filter(k=>!(o.loc&&k==='Location'));
+      keys.forEach(k=>{const v1=a.props[k]??'',v2=b.props[k]??'',same=normProp(v1)===normProp(v2);
+        props.push([tl,k,v1,v2,same?'Same':v1===''?'Only in target':v2===''?'Only in source':'Different']);if(!same)cnt.props++});
+    }
+  });
+  leftA.forEach(t=>rows.push([t.name,'(whole table)','','','','','','','','','Only in source',t.cols.length+' columns']));
+  leftB.forEach(t=>rows.push([t.name,'(whole table)','','','','','','','','','Only in target',t.cols.length+' columns']));
+  S.ddl={header,rows,propHeader:['table','property','value_src','value_tgt','ddl_status'],props,cnt,notes,src:ta,tgt:tb};
+  renderDDL();$('btnDlDDL').disabled=false;
+  const n=cnt.diff+cnt.src+cnt.tgt+cnt.props+cnt.tblSrc+cnt.tblTgt;
+  toast('toastDDL',n?`Found ${n} difference${n>1?'s':''}.`:'The DDL matches.',!n);
+  return true;
+}
+function renderDDL(){
+  const D=S.ddl;if(!D)return;const c=D.cnt,n=c.diff+c.src+c.tgt+c.props+c.tblSrc+c.tblTgt;
+  $('ddlSummary').innerHTML=`<div class="pill ${n?'bad':'ok'}"><span>Result</span><b>${n?'Different':'Identical'}</b></div>
+   <div class="pill"><span>Tables compared</span><b>${c.tables}</b></div>
+   <div class="pill ok"><span>Columns same</span><b>${c.same}</b></div>
+   <div class="pill ${c.diff?'warn':'ok'}"><span>Columns different</span><b>${c.diff}</b></div>
+   <div class="pill ${c.src?'bad':'ok'}"><span>Columns only in source</span><b>${c.src}</b></div>
+   <div class="pill ${c.tgt?'bad':'ok'}"><span>Columns only in target</span><b>${c.tgt}</b></div>
+   ${c.tblSrc||c.tblTgt?`<div class="pill bad"><span>Unmatched tables</span><b>${c.tblSrc+c.tblTgt}</b></div>`:''}
+   <div class="pill ${c.props?'warn':'ok'}"><span>Property differences</span><b>${c.props}</b></div>`;
+  const only=$('ddlOnlyDiff').checked;
+  const flag={2:/\bposition\b/,4:/\btype\b/,6:/\bnullable\b/,8:/\bdefault\b/};
+  let last=null,html='<table><tr><th>Column</th><th class="s">Pos</th><th class="t">Pos</th><th class="s">Type (source)</th><th class="t">Type (target)</th><th class="s">Nullable</th><th class="t">Nullable</th><th class="s">Default</th><th class="t">Default</th><th>Status</th><th>Detail</th></tr>';
+  const list=D.rows.filter(r=>!only||r[10]!=='Same');
+  list.forEach(r=>{
+    if(r[0]!==last){last=r[0];html+=`<tr class="grp"><td colspan="11">${esc(r[0])}</td></tr>`}
+    const hl=new Set();if(r[10]==='Different')for(const k in flag)if(flag[k].test(r[11])){hl.add(+k);hl.add(+k+1)}
+    html+='<tr>'+r.slice(1).map((v,j)=>{const i=j+1;
+      if(i===10)return `<td class="${stCls(v)}">${esc(v)}</td>`;
+      if(i===11)return `<td class="det">${esc(v)}</td>`;
+      return `<td class="${hl.has(i)?'diff':''}">${esc(v)}</td>`}).join('')+'</tr>';
+  });
+  if(!list.length)html+='<tr><td colspan="11" class="miss">No column differences.</td></tr>';
+  $('ddlOut').innerHTML=html+'</table>';$('ddlOut').hidden=false;
+  const pl=D.props.filter(r=>!only||r[4]!=='Same');
+  if(D.props.length){
+    let ph='<table><tr><th>Table</th><th>Property</th><th class="s">Source</th><th class="t">Target</th><th>Status</th></tr>';
+    pl.forEach(r=>{const d=r[4]==='Different';ph+=`<tr><td>${esc(r[0])}</td><td>${esc(r[1])}</td><td class="${d?'diff':''}">${esc(r[2])}</td><td class="${d?'diff':''}">${esc(r[3])}</td><td class="${stCls(r[4])}">${esc(r[4])}</td></tr>`});
+    if(!pl.length)ph+='<tr><td colspan="5" class="miss">No property differences.</td></tr>';
+    $('ddlPropOut').innerHTML=ph+'</table>';$('ddlPropWrap').hidden=false;
+  }else $('ddlPropWrap').hidden=true;
+  $('ddlNote').textContent=D.notes.join(' ');
+}
+function buildDdlWb(){
+  const D=S.ddl;if(!D)return null;const wb=XLSX.utils.book_new(),c=D.cnt;
+  XLSX.utils.book_append_sheet(wb,sheet([D.header,...D.rows],[{wch:26},{wch:22},{wch:12},{wch:12},{wch:20},{wch:20},{wch:13},{wch:13},{wch:16},{wch:16},{wch:15},{wch:56}]),'DDL columns');
+  if(D.props.length)XLSX.utils.book_append_sheet(wb,sheet([D.propHeader,...D.props],[{wch:26},{wch:30},{wch:40},{wch:40},{wch:15}]),'DDL properties');
+  XLSX.utils.book_append_sheet(wb,sheet([['Item','Value'],['Tables compared',c.tables],['Columns same',c.same],['Columns different',c.diff],['Columns only in source',c.src],['Columns only in target',c.tgt],['Tables only in source',c.tblSrc],['Tables only in target',c.tblTgt],['Property differences',c.props],...D.notes.map(n=>['Note',n])],[{wch:26},{wch:90}]),'Summary');
+  return wb;
+}
+
+/* ---------- JSON compare ---------- */
+const jType=v=>v===null?'null':Array.isArray(v)?'array':typeof v;
+const jPath=(p,k)=>/^[A-Za-z_$][\w$]*$/.test(k)?p+'.'+k:p+'['+JSON.stringify(k)+']';
+const jShow=v=>v===undefined?'':JSON.stringify(v);
+function jCanon(v,o){
+  if(Array.isArray(v)){const parts=v.map(x=>jCanon(x,o));if(o.order)parts.sort();return '['+parts.join(',')+']'}
+  if(v&&typeof v==='object')return '{'+Object.keys(v).filter(k=>!o.ign(k)).sort().map(k=>JSON.stringify(k)+':'+jCanon(v[k],o)).join(',')+'}';
+  if(typeof v==='string'){if(o.numStr&&v.trim()!==''&&!isNaN(Number(v)))return String(Number(v));return JSON.stringify(o.ci?v.toLowerCase():v)}
+  return JSON.stringify(v);
+}
+function jAutoKey(a,b){
+  const all=[...a,...b];
+  if(!all.length||!all.every(x=>x&&typeof x==='object'&&!Array.isArray(x)))return '';
+  const cands=Object.keys(all[0]).filter(k=>all.every(x=>k in x&&(typeof x[k]==='string'||typeof x[k]==='number'))&&new Set(a.map(x=>x[k])).size===a.length&&new Set(b.map(x=>x[k])).size===b.length);
+  return cands.find(k=>/^id$/i.test(k))||cands.find(k=>/(_id|Id|ID)$/.test(k))||cands.find(k=>/(key|code|no|number)$/i.test(k))||'';
+}
+function jDiff(a,b,path,o,out){
+  const ta=jType(a),tb=jType(b);
+  if(ta!==tb){
+    if(o.numStr&&((ta==='number'&&tb==='string')||(ta==='string'&&tb==='number'))&&String(ta==='string'?a:b).trim()!==''&&Number(a)===Number(b)){out.push([path,'Same',a,b]);return}
+    out.push([path,'Type changed',a,b]);return;
+  }
+  if(ta==='object'){
+    const ka=Object.keys(a).filter(k=>!o.ign(k)),kb=Object.keys(b).filter(k=>!o.ign(k));
+    if(!ka.length&&!kb.length){out.push([path,'Same',a,b]);return}
+    ka.forEach(k=>{if(Object.prototype.hasOwnProperty.call(b,k))jDiff(a[k],b[k],jPath(path,k),o,out);else out.push([jPath(path,k),'Removed',a[k],undefined])});
+    kb.forEach(k=>{if(!Object.prototype.hasOwnProperty.call(a,k))out.push([jPath(path,k),'Added',undefined,b[k]])});
+    return;
+  }
+  if(ta==='array'){
+    if(!a.length&&!b.length){out.push([path,'Same',a,b]);return}
+    const key=o.key||(o.order?jAutoKey(a,b):'');
+    const hasKey=arr=>arr.every(x=>x&&typeof x==='object'&&!Array.isArray(x)&&key in x);
+    if(key&&hasKey(a)&&hasKey(b)){
+      const mb=new Map();b.forEach((x,j)=>{const k=jCanon(x[key],o);if(!mb.has(k))mb.set(k,[]);mb.get(k).push(j)});
+      const used=new Set(),lab=x=>`${path}[${key}=${jShow(x[key])}]`;
+      a.forEach(x=>{const list=mb.get(jCanon(x[key],o));if(list&&list.length){const j=list.shift();used.add(j);jDiff(x,b[j],lab(x),o,out)}else out.push([lab(x),'Removed',x,undefined])});
+      b.forEach((x,j)=>{if(!used.has(j))out.push([lab(x),'Added',undefined,x])});
+      return;
+    }
+    if(o.order){
+      const mb=new Map();b.forEach((x,j)=>{const k=jCanon(x,o);if(!mb.has(k))mb.set(k,[]);mb.get(k).push(j)});
+      const used=new Set(),leftA=[];
+      a.forEach((x,i)=>{const list=mb.get(jCanon(x,o));if(list&&list.length){const j=list.shift();used.add(j);out.push([`${path}[${i}]`,'Same',x,b[j]])}else leftA.push(i)});
+      const leftB=b.map((_,j)=>j).filter(j=>!used.has(j)),n=Math.min(leftA.length,leftB.length);
+      for(let k=0;k<n;k++)jDiff(a[leftA[k]],b[leftB[k]],`${path}[${leftA[k]}]`,o,out);
+      leftA.slice(n).forEach(i=>out.push([`${path}[${i}]`,'Removed',a[i],undefined]));
+      leftB.slice(n).forEach(j=>out.push([`${path}[${j}]`,'Added',undefined,b[j]]));
+      return;
+    }
+    for(let i=0;i<Math.max(a.length,b.length);i++){
+      if(i>=b.length)out.push([`${path}[${i}]`,'Removed',a[i],undefined]);
+      else if(i>=a.length)out.push([`${path}[${i}]`,'Added',undefined,b[i]]);
+      else jDiff(a[i],b[i],`${path}[${i}]`,o,out);
+    }
+    return;
+  }
+  const eq=a===b||(o.ci&&ta==='string'&&a.toLowerCase()===b.toLowerCase());
+  out.push([path,eq?'Same':'Changed',a,b]);
+}
+function parseJSONText(txt,side){
+  try{return {v:JSON.parse(txt),lines:false}}catch(e){
+    const ls=txt.split(/\r?\n/).filter(l=>l.trim());
+    if(ls.length>1){try{return {v:ls.map(l=>JSON.parse(l)),lines:true}}catch(_){}}
+    let where='';const m=String(e.message).match(/position (\d+)/);
+    if(m){const pos=+m[1],before=txt.slice(0,pos);where=` at line ${before.split('\n').length}, column ${pos-before.lastIndexOf('\n')}`}
+    throw new Error(`${side} is not valid JSON${where}. ${String(e.message).replace(/\s*\(line.*$|\s*in JSON at position.*$/,'')}`);
+  }
+}
+function compareJSON(){
+  const ta=$('jsSrc').value,tb=$('jsTgt').value;
+  if(!ta.trim()||!tb.trim()){toast('toastJSON','Paste JSON on both sides first.',false);return false}
+  let A,B;
+  try{A=parseJSONText(ta,'Source');B=parseJSONText(tb,'Target')}
+  catch(e){toast('toastJSON',e.message,false);$('jsOut').hidden=true;$('jsSummary').innerHTML='';return false}
+  const ignSet=new Set($('jsIgnore').value.split(',').map(s=>s.trim().toLowerCase()).filter(Boolean));
+  const o={order:$('jsOrder').checked,key:$('jsKey').value.trim(),ci:$('jsCase').checked,numStr:$('jsNumStr').checked,ign:k=>ignSet.has(String(k).toLowerCase())};
+  const out=[];jDiff(A.v,B.v,'$',o,out);
+  const cnt={same:0,changed:0,type:0,added:0,removed:0};
+  out.forEach(r=>{const s=r[1];if(s==='Same')cnt.same++;else if(s==='Changed')cnt.changed++;else if(s==='Type changed')cnt.type++;else if(s==='Added')cnt.added++;else cnt.removed++});
+  const rows=out.map(([p,s,a,b])=>[p,s,jShow(a),jShow(b),a===undefined?'':jType(a),b===undefined?'':jType(b)]);
+  const notes=[];if(A.lines||B.lines)notes.push('Read as JSON Lines (one record per line).');
+  if(ignSet.size)notes.push('Ignored keys: '+[...ignSet].join(', ')+'.');
+  S.json={header:['path','json_status','value_src','value_tgt','type_src','type_tgt'],rows,cnt,notes,src:ta,tgt:tb};
+  renderJSON();$('btnDlJSON').disabled=false;
+  const n=cnt.changed+cnt.type+cnt.added+cnt.removed;
+  toast('toastJSON',n?`Found ${n} difference${n>1?'s':''}.`:'The two JSON documents match.',!n);
+  return true;
+}
+function renderJSON(){
+  const J=S.json;if(!J)return;const c=J.cnt,n=c.changed+c.type+c.added+c.removed;
+  $('jsSummary').innerHTML=`<div class="pill ${n?'bad':'ok'}"><span>Result</span><b>${n?'Different':'Identical'}</b></div>
+   <div class="pill ok"><span>Same values</span><b>${c.same}</b></div>
+   <div class="pill ${c.changed?'warn':'ok'}"><span>Changed</span><b>${c.changed}</b></div>
+   <div class="pill ${c.type?'warn':'ok'}"><span>Type changed</span><b>${c.type}</b></div>
+   <div class="pill ${c.removed?'bad':'ok'}"><span>Only in source</span><b>${c.removed}</b></div>
+   <div class="pill ${c.added?'bad':'ok'}"><span>Only in target</span><b>${c.added}</b></div>`;
+  const showSame=$('jsShowSame').checked,list=J.rows.filter(r=>showSame||r[1]!=='Same');
+  let html='<table><tr><th>Path</th><th>Status</th><th class="s">Source value</th><th class="t">Target value</th><th class="s">Type</th><th class="t">Type</th></tr>';
+  list.slice(0,1000).forEach(r=>{const d=r[1]==='Changed'||r[1]==='Type changed';
+    html+=`<tr><td>${esc(r[0])}</td><td class="${stCls(r[1])}">${esc(r[1])}</td><td class="${d?'diff':r[2]===''?'miss':''}" title="${esc(cut(r[2],2000))}">${esc(cut(r[2],160))}</td><td class="${d?'diff':r[3]===''?'miss':''}" title="${esc(cut(r[3],2000))}">${esc(cut(r[3],160))}</td><td class="${r[1]==='Type changed'?'diff':''}">${esc(r[4])}</td><td class="${r[1]==='Type changed'?'diff':''}">${esc(r[5])}</td></tr>`});
+  if(!list.length)html+='<tr><td colspan="6" class="miss">No differences.</td></tr>';
+  $('jsOut').innerHTML=html+'</table>';$('jsOut').hidden=false;
+  const extra=[...J.notes];if(list.length>1000)extra.push('Showing the first 1,000 rows. The download has all of them.');
+  $('jsNote').textContent=extra.join(' ');
+}
+function buildJsonWb(){
+  const J=S.json;if(!J)return null;const wb=XLSX.utils.book_new(),c=J.cnt;
+  const clip=v=>{v=String(v);return v.length>32000?v.slice(0,32000)+'…':v};
+  XLSX.utils.book_append_sheet(wb,sheet([J.header,...J.rows.map(r=>[r[0],r[1],clip(r[2]),clip(r[3]),r[4],r[5]])],[{wch:44},{wch:14},{wch:40},{wch:40},{wch:10},{wch:10}]),'JSON diff');
+  XLSX.utils.book_append_sheet(wb,sheet([['Item','Value'],['Same values',c.same],['Changed',c.changed],['Type changed',c.type],['Only in source',c.removed],['Only in target',c.added],...J.notes.map(n=>['Note',n])],[{wch:20},{wch:80}]),'Summary');
+  return wb;
+}
+
+/* ---------- wiring for the two tabs ---------- */
+wireText('ddlSrc','ddlSrcFile');wireText('ddlTgt','ddlTgtFile');wireText('jsSrc','jsSrcFile');wireText('jsTgt','jsTgtFile');
+$('btnDDL').addEventListener('click',()=>{if(compareDDL()&&typeof emit==='function')emit('ddl')});
+$('btnJSON').addEventListener('click',()=>{if(compareJSON()&&typeof emit==='function')emit('json')});
+['ddlCase','ddlSchema','ddlSyn','ddlOrder','ddlProps','ddlLoc','ddlCmt'].forEach(id=>$(id).addEventListener('change',()=>{if(S.ddl)compareDDL()}));
+$('ddlOnlyDiff').addEventListener('change',renderDDL);
+['jsOrder','jsCase','jsNumStr'].forEach(id=>$(id).addEventListener('change',()=>{if(S.json)compareJSON()}));
+['jsKey','jsIgnore'].forEach(id=>$(id).addEventListener('change',()=>{if(S.json)compareJSON()}));
+$('jsShowSame').addEventListener('change',renderJSON);
+const swap=(a,b,run)=>{const t=$(a).value;$(a).value=$(b).value;$(b).value=t;run()};
+$('btnSwapDDL').addEventListener('click',()=>swap('ddlSrc','ddlTgt',()=>{if(S.ddl)compareDDL()}));
+$('btnSwapJSON').addEventListener('click',()=>swap('jsSrc','jsTgt',()=>{if(S.json)compareJSON()}));
+$('btnFmtJSON').addEventListener('click',()=>{
+  const bad=[];[['jsSrc','Source'],['jsTgt','Target']].forEach(([id,side])=>{const t=$(id).value;if(!t.trim())return;try{$(id).value=JSON.stringify(JSON.parse(t),null,2)}catch(e){bad.push(side)}});
+  toast('toastJSON',bad.length?bad.join(' and ')+' could not be formatted because it is not valid JSON.':'Formatted.',!bad.length);
+});
+$('btnDlDDL').addEventListener('click',()=>{const wb=buildDdlWb();if(wb)saveWb(wb,'ddl_compare_'+stamp()+'.xlsx','toastDDL')});
+$('btnDlJSON').addEventListener('click',()=>{const wb=buildJsonWb();if(wb)saveWb(wb,'json_compare_'+stamp()+'.xlsx','toastJSON')});
+
+$('ddlSrc').value=`-- Example: source DDL (Hive)
+CREATE TABLE stg.customers (
+  customer_id   INT NOT NULL,
+  name          VARCHAR(50),
+  village       VARCHAR(30),
+  salary        DECIMAL(10,2),
+  created_at    TIMESTAMP,
+  PRIMARY KEY (customer_id)
+);
+
+CREATE EXTERNAL TABLE stg.invoices (
+  invoice_id    BIGINT,
+  customer_id   INT,
+  amount        DECIMAL(12,2),
+  status        STRING
+)
+PARTITIONED BY (load_date STRING)
+STORED AS ORC
+LOCATION '/data/stg/invoices';`;
+$('ddlTgt').value=`-- Example: target DDL (Hive)
+CREATE TABLE dwh.customers (
+  customer_id   INTEGER NOT NULL,
+  name          VARCHAR(100),
+  village       VARCHAR(30),
+  salary        DECIMAL(12,2),
+  email         VARCHAR(120),
+  PRIMARY KEY (customer_id)
+);
+
+CREATE EXTERNAL TABLE dwh.invoices (
+  invoice_id    BIGINT NOT NULL,
+  customer_id   INT,
+  amount        DECIMAL(12,2),
+  status        STRING
+)
+PARTITIONED BY (load_date STRING)
+STORED AS PARQUET
+LOCATION '/data/dwh/invoices';`;
+$('jsSrc').value=JSON.stringify({customer_id:1,name:'Hs',village:'hyd',active:true,salary:52000,address:{city:'Hyderabad',pin:'500001'},tags:['gold','early'],orders:[{invoice_id:101,amount:250.5},{invoice_id:102,amount:99}]},null,2);
+$('jsTgt').value=JSON.stringify({customer_id:'1',name:'Hs',village:'Hyd',active:true,salary:52000,address:{city:'Hyderabad',pin:'500002',state:'TS'},tags:['early','gold'],orders:[{invoice_id:102,amount:99},{invoice_id:101,amount:275.5}],updated_at:'2026-10-19T10:00:00Z'},null,2);
+
+/* ---------- excel export ---------- */
+function toast(id,msg,ok){const t=$(id);t.textContent=msg;t.className='toast '+(ok?'ok':'bad')}
+const ST={
+  head:{font:{bold:true,color:{rgb:'FFFFFF'}},fill:{fgColor:{rgb:'2350B8'}},alignment:{vertical:'center'}},
+  headSrc:{font:{bold:true,color:{rgb:'FFFFFF'}},fill:{fgColor:{rgb:'3B4FD8'}}},
+  headTgt:{font:{bold:true,color:{rgb:'FFFFFF'}},fill:{fgColor:{rgb:'B8650F'}}},
+  T:{font:{bold:true,color:{rgb:'006100'}},fill:{fgColor:{rgb:'C6EFCE'}},alignment:{horizontal:'center'}},
+  F:{font:{bold:true,color:{rgb:'9C0006'}},fill:{fgColor:{rgb:'FFC7CE'}},alignment:{horizontal:'center'}},
+  diff:{fill:{fgColor:{rgb:'FFEB9C'}},font:{color:{rgb:'9C5700'}}},
+  miss:{font:{italic:true,color:{rgb:'808080'}}},
+  only:{font:{bold:true,color:{rgb:'9C5700'}},fill:{fgColor:{rgb:'FFEB9C'}}},
+  add:{font:{bold:true,color:{rgb:'1F4E78'}},fill:{fgColor:{rgb:'DDEBF7'}},alignment:{horizontal:'center'}}
+};
+function sheet(aoa,widths){
+  const ws=XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols']=widths||aoa[0].map(h=>({wch:Math.max(12,String(h).length+2)}));
+  ws['!freeze']={xSplit:0,ySplit:1};
+  const hdr=aoa[0].map(String);
+  const isMatch=c=>/_match$/.test(hdr[c])||hdr[c]==='match';
+  const pairOf=c=>{const m=hdr[c].match(/^(.*)_(src|tgt)$/);if(!m)return -1;return hdr.indexOf(m[1]+'_match')};
+  for(let r=0;r<aoa.length;r++){for(let c=0;c<hdr.length;c++){
+    const ref=XLSX.utils.encode_cell({r,c});const cell=ws[ref];if(!cell)continue;
+    if(r===0){cell.s=/_src$/.test(hdr[c])?ST.headSrc:/_tgt$/.test(hdr[c])?ST.headTgt:ST.head;continue}
+    const v=aoa[r][c];
+    if(isMatch(c)&&typeof v==='boolean'){cell.s=v?ST.T:ST.F;continue}
+    if(hdr[c]==='line_status'){if(v!=='same')cell.s=v==='changed'?ST.diff:v==='source only'?ST.F:ST.T;continue}
+    if(hdr[c]==='ddl_status'||hdr[c]==='json_status'){cell.s=v==='Same'?ST.T:/only in source|removed/i.test(v)?ST.F:/only in target|added/i.test(v)?ST.add:ST.diff;continue}
+    if(hdr[c]==='status'){cell.s=v==='PASS'?ST.T:v==='FAIL'?ST.F:ST.miss;continue}
+    if(v==='(missing)'){cell.s=ST.miss;continue}
+    if(hdr[c]==='row_status'&&v!=='In both'){cell.s=ST.only;continue}
+    const p=pairOf(c);if(p>=0&&aoa[r][p]===false)cell.s=ST.diff;
+    const m2=hdr[c].match(/^(.*)_(src|tgt)$/);
+    if(m2&&p<0){const sc=Math.max(hdr.indexOf('ddl_status'),hdr.indexOf('json_status'));const oc=hdr.indexOf(m2[1]+(m2[2]==='src'?'_tgt':'_src'));
+      if(sc>=0&&oc>=0){const st=String(aoa[r][sc]);if(st!=='Same'&&!/only in|added|removed/i.test(st)&&String(aoa[r][oc])!==String(v))cell.s=ST.diff}}
+  }}
+  return ws}
+let downloads=null;
+if(window.claude&&claude.use)claude.use('downloads').then(d=>{downloads=d}).catch(()=>{});
+async function saveWb(wb,filename,toastId){
+  const buf=XLSX.write(wb,{bookType:'xlsx',type:'array'});
+  if(downloads){
+    try{await downloads.save({filename,data:new Blob([buf])});toast(toastId,'Saved '+filename,true)}
+    catch(e){toast(toastId,e&&e.code==='declined'?'Download cancelled.':'Download is not available here.',false)}
+  }else{ /* running outside claude.ai, e.g. your own server */
+    try{XLSX.writeFile(wb,filename);toast(toastId,'Saved '+filename,true)}catch(e){toast(toastId,'Download is not available in this view.',false)}
+  }
+}
+const stamp=()=>new Date().toISOString().slice(0,16).replace(/[:T]/g,'-');
+$('btnDlCmp').addEventListener('click',()=>{
+  const R=S.result;if(!R)return;const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,sheet([R.header,...R.rows]),'Comparison');
+  const sum=[['Item','Value'],['Source file',S.src.name],['Target file',S.tgt.name],['Rows matched by',R.keyLabel],
+    ['Ignore case',R.opts.ci],['Trim spaces',R.opts.trim],['Numbers by value',R.opts.num],
+    ['Rows compared',R.rows.length],['Fully matched rows',R.goodRows],['Rows with differences',R.rows.length-R.goodRows],
+    ['Source only rows',R.srcOnly],['Target only rows',R.tgtOnly],['Columns compared',S.pairs.length],
+    ['Columns only in source',R.onlySrcCols.join(', ')||'none'],['Columns only in target',R.onlyTgtCols.join(', ')||'none'],[],['Column','Mismatches']];
+  S.pairs.forEach((p,k)=>sum.push([p.name,R.colBad[k]]));
+  XLSX.utils.book_append_sheet(wb,sheet(sum,[{wch:28},{wch:40}]),'Summary');
+  if(S.stats)XLSX.utils.book_append_sheet(wb,sheet([S.stats.header,...S.stats.rows]),'Statistics');
+  if(S.dq){XLSX.utils.book_append_sheet(wb,sheet([S.dq.sumH,...S.dq.sum]),'DQ Summary');XLSX.utils.book_append_sheet(wb,sheet([S.dq.detH,...S.dq.det],[{wch:14},{wch:10},{wch:20},{wch:10},{wch:18},{wch:12},{wch:80}]),'DQ Details')}
+  saveWb(wb,'compared_results_'+stamp()+'.xlsx','toastCmp');
+});
+$('btnDlStat').addEventListener('click',()=>{
+  if(!S.stats)return;const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,sheet([S.stats.header,...S.stats.rows]),'Statistics');
+  saveWb(wb,'statistics_'+stamp()+'.xlsx','toastStat');
+});
+
+function buildCodeWb(){const C=S.code;if(!C)return null;const wb=XLSX.utils.book_new();
+  const lab={same:'same',chg:'changed',del:'source only',add:'target only'};
+  const aoa=[['src_line','source','tgt_line','target','line_status']];
+  C.rows.forEach(r=>{const L=r.l>=0?C.A[r.l]:null,R=r.r>=0?C.B[r.r]:null;aoa.push([L?L.n:'',L?L.t:'',R?R.n:'',R?R.t:'',lab[r.type]])});
+  XLSX.utils.book_append_sheet(wb,sheet(aoa,[{wch:9},{wch:70},{wch:9},{wch:70},{wch:14}]),'Code diff');
+  XLSX.utils.book_append_sheet(wb,sheet([['Item','Value'],['Same lines',C.counts.same],['Changed lines',C.counts.chg],['Only in source',C.counts.del],['Only in target',C.counts.add]],[{wch:20},{wch:12}]),'Summary');
+  return wb}
+/* ---------- download bar under each tab's results: own file name + today's date ---------- */
+const EXPORTS={
+  cmp:['btnDlCmp','compared_results',()=>buildCompareWb()],
+  stat:['btnDlStat','statistics',()=>buildStatsWb()],
+  dq:['btnDlDQ','validation_report',()=>buildDQWb()],
+  code:['btnDlCode','code_compare',()=>buildCodeWb()],
+  ddl:['btnDlDDL','ddl_compare',()=>buildDdlWb()],
+  json:['btnDlJSON','json_compare',()=>buildJsonWb()]
+};
+const today=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
+const DL_ICON='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0l-5-5m5 5l5-5"/><path d="M4 17v2a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2"/></svg>';
+function cleanName(s,def){
+  s=String(s||'').trim().replace(/\.xlsx$/i,'').replace(/[\\/:*?"<>|\u0000-\u001f]+/g,'_').replace(/\s+/g,'_').replace(/_+/g,'_').replace(/^[_.]+|[_.]+$/g,'');
+  return s.slice(0,120)||def;
+}
+const fnStore={get(k){try{return localStorage.getItem('recon_fn_'+k)}catch(e){return null}},set(k,v){try{localStorage.setItem('recon_fn_'+k,v)}catch(e){}}};
+function fileNameFor(k){
+  const def=EXPORTS[k][1];let n=cleanName($('fn-'+k).value,def);const d=today();
+  if($('fd-'+k).checked&&!n.endsWith(d))n+='_'+d;
+  return n+'.xlsx';
+}
+Object.entries(EXPORTS).forEach(([k,[btnId,def,build]])=>{
+  const pane=$('pane-'+k),btn=$(btnId);if(!pane||!btn)return;
+  const bar=document.createElement('div');bar.className='exportbar';bar.id='exp-'+k;bar.hidden=true;
+  bar.innerHTML=`<div class="exp-ico">${DL_ICON}</div>
+    <div class="field grow"><label class="label" for="fn-${k}">Report file name</label>
+      <div class="fnrow"><input type="text" id="fn-${k}" spellcheck="false" autocomplete="off" maxlength="140"><span class="fnext" id="fx-${k}"></span></div></div>
+    <label class="check"><input type="checkbox" id="fd-${k}" checked> Add today's date</label>
+    <button class="primary" type="button" id="dl-${k}">Download Excel</button>
+    <span class="toast" id="tx-${k}"></span>`;
+  pane.appendChild(bar);
+  const inp=$('fn-'+k);inp.value=fnStore.get(k)||def;
+  const upd=()=>{const full=fileNameFor(k),base=cleanName(inp.value,def);$('fx-'+k).textContent=full.slice(base.length);bar.title='Saves as '+full};
+  inp.addEventListener('input',upd);$('fd-'+k).addEventListener('change',upd);bar.addEventListener('focusin',upd);upd();
+  inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();$('dl-'+k).click()}});
+  $('dl-'+k).addEventListener('click',()=>{
+    upd();const wb=build();
+    if(!wb){toast('tx-'+k,'Run the compare first.',false);return}
+    fnStore.set(k,cleanName(inp.value,def));
+    saveWb(wb,fileNameFor(k),'tx-'+k);
+  });
+  const sync=()=>{bar.hidden=btn.disabled;if(btn.disabled)$('tx-'+k).textContent=''};
+  new MutationObserver(sync).observe(btn,{attributes:true,attributeFilter:['disabled']});sync();
+});
+function syncDecks(which){const d=$('decks');if(d)d.hidden=!['cmp','stat','dq'].includes(which)}
+
+/* ---------- sample data so the page opens in a working state ---------- */
+S.src=fromAoA([['Name','id','village','salary'],['Hs','1','hyd','52000'],['Ravi','2','vizag','48000'],['Anu','3','guntur','61000'],['Kiran','4','nellore','45000'],['Sita','','kadapa','41000']],'sample_source.csv (example)');
+S.tgt=fromAoA([['village','ID','name','Salary'],['hyd','1','hs','52000.00'],['Vizag','2','Ravi','47500'],['guntur','3','Anu','61000'],['tirupati','5','Mahesh','39000'],['guntur','3','Anu','61000']],'sample_target.csv (example)');
+syncDecks('cmp');refresh();compare();runDQ();compareCode();compareDDL();compareJSON();
+})();
+</script>
+
+</body></html>
