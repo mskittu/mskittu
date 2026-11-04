@@ -1,0 +1,220 @@
+==========================================================================
+ SOURCE TARGET RECON - WINDOWS SETUP (laptop / VDI)
+ Run the website on Windows, connect to Hive through Hue, run queries
+==========================================================================
+
+WHAT YOU NEED
+  - Windows laptop or VDI where the Hue page opens in Edge / Chrome:
+      https://nykpsr000012067.intranet.barcapint.com:8888/hue
+  - Your LDAP username and password (the ones you type on that Hue page)
+  - Python 3.11
+  - recon_app.zip
+
+--------------------------------------------------------------------------
+STEP 1 - Unzip
+--------------------------------------------------------------------------
+  Unzip recon_app.zip to a local folder, for example
+      C:\Users\<you>\recon_app
+  (A local folder is best. Avoid network drives.)
+
+  You should see app.py, connectors.py, checkhue.py, .env.vdi.example and
+  the folders deploy, static, templates.
+
+  Updating an older copy? Unzip over the same folder. Your .env and data
+  folder are kept.
+
+--------------------------------------------------------------------------
+STEP 2 - Check Python 3.11
+--------------------------------------------------------------------------
+  Press Windows key, type  cmd , press Enter. In the black window type:
+      py -3.11 --version
+  Expected:  Python 3.11.x
+
+  Not found?
+    - Install "Python 3.11" from the company software portal
+      (or python.org, and tick "Add python.exe to PATH" during install).
+    - Close and reopen the cmd window, then try again.
+
+--------------------------------------------------------------------------
+STEP 3 - First start (installs everything)
+--------------------------------------------------------------------------
+  Double-click:   recon_app\deploy\run_local_windows.bat
+
+  The first time it:
+    - creates the folder .venv (a private Python just for this app)
+    - installs the packages in requirements-vdi.txt
+      (Flask, waitress, requests, oracledb, boto3, truststore)
+    - copies .env.vdi.example to .env
+    - starts the website and opens http://127.0.0.1:5000
+
+  Keep the black window open while you use the website.
+  To stop: click the black window and press Ctrl+C. To start again:
+  double-click the .bat again.
+
+  If you see "[FAIL] pip could not download the packages":
+    Your VDI can't reach pypi.org directly. Ask your platform team for the
+    company Python package mirror (Artifactory / Nexus) URL. Then open
+    deploy\run_local_windows.bat in Notepad and fill in the PIP_OPTS line:
+      set "PIP_OPTS=--index-url https://<mirror>/api/pypi/pypi/simple --trusted-host <mirror-host>"
+    Save, then double-click the .bat again.
+
+  If pip says "certificate verify failed":
+    Add  --use-feature=truststore  to PIP_OPTS (pip then uses the Windows
+    certificate store), or ask for the mirror URL as above.
+
+--------------------------------------------------------------------------
+STEP 4 - Excel library (one-time; needed for Excel downloads and uploads)
+--------------------------------------------------------------------------
+  In Edge / Chrome open:
+      https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js
+  Press Ctrl+S and save it as:
+      recon_app\static\xlsx.bundle.js
+  (If the site is blocked, queries and compares still work. Only Excel
+  download and file upload are off, and a red banner says so.)
+
+--------------------------------------------------------------------------
+STEP 5 - Check the Hue settings in .env
+--------------------------------------------------------------------------
+  Open  recon_app\.env  in Notepad. These lines must be there WITHOUT a #
+  in front:
+
+      RECON_AUTH=hue
+      RECON_HUE_URL=https://nykpsr000012067.intranet.barcapint.com:8888
+      RECON_HUE_LOGIN_SERVER=LDAP
+      RECON_HUE_DATABASE=default
+      NO_PROXY=localhost,127.0.0.1,.intranet.barcapint.com,.barcapint.com
+
+  Notes:
+    - RECON_HUE_URL is only the address and port: no /hue/... at the end
+      (if you paste the full login link it still works).
+    - RECON_HUE_LOGIN_SERVER is the value in the dropdown on the Hue
+      sign-in page (LDAP).
+    - Old .env from an earlier version? Add any missing lines, or delete
+      .env and double-click run_local_windows.bat to get a fresh one.
+
+  Save the file.
+
+--------------------------------------------------------------------------
+STEP 6 - Run the Hive check  (do this before using the website)
+--------------------------------------------------------------------------
+  Double-click:   recon_app\deploy\check_hive.bat
+
+  It checks, in order, and stops at the first problem with the exact fix:
+      1. Settings in .env
+      2. Network: can this machine reach the Hue server and port 8888
+      3. Hue sign-in page and HTTPS certificate
+      4. Sign in with your LDAP username + password (typed in the window,
+         not saved)
+      5. SELECT 1 through Hue
+      6. Optional: 5 rows from a table you type (e.g. imp.mds_monthly)
+
+  All [ OK ]  ->  go to STEP 7.
+
+  Most common [FAIL]s and fixes:
+    3. "certificate is not trusted"
+         - Make sure truststore is installed:
+             recon_app\.venv\Scripts\pip install truststore
+         - Still failing: get the company root CA file from IT, save it as
+           C:\certs\company-root-ca.pem, and in .env set
+             RECON_HUE_CA_BUNDLE=C:\certs\company-root-ca.pem
+         - Local test only:  RECON_HUE_VERIFY_SSL=0
+    2. "Can't open port" / 3. "proxy refused"
+         - Check NO_PROXY in .env (STEP 5).
+         - Open the Hue page in the browser on the SAME VDI. If it doesn't
+           open there either, the VDI can't reach Hue: ask IT.
+    4. "Hue sign-in failed"
+         - Same username/password as the Hue page. Check the
+           RECON_HUE_LOGIN_SERVER value matches the dropdown.
+         - Stop after 2 wrong tries: LDAP can lock your account.
+    5. SELECT 1 fails after sign-in works
+         - Run SELECT 1 in the Hue editor yourself. If it fails there too,
+           you need Hive access from the Hadoop team.
+
+  After changing .env, close the website window (Ctrl+C) and start
+  run_local_windows.bat again. The website reads .env only at start.
+
+--------------------------------------------------------------------------
+STEP 7 - Sign in to the website
+--------------------------------------------------------------------------
+  Open http://127.0.0.1:5000
+  Sign in with your LDAP username and password (the same as Hue).
+  Your Recon account is created automatically the first time.
+
+  The admin account (admin / ChangeMe#2026) signs in with its Recon
+  password. Use it only for Admin tasks. It asks you to choose a new
+  password the first time.
+
+--------------------------------------------------------------------------
+STEP 8 - Run Hive queries and compare
+--------------------------------------------------------------------------
+  Compare records tab:
+    1. Source connection: "Hive (Hue)". It says "Runs as you, with your
+       own Hue sign-in" and there is no password box.
+    2. Press Test  ->  "Connected to Hive (Hue)".
+    3. Source query, for example:
+         SELECT account_id, ead, ecl, as_of_date
+         FROM imp.loan_impairments
+         WHERE as_of_date = '2026-09-30'
+    4. Target connection: the other system (Hive (Hue) again for
+       Hive-to-Hive, Oracle, or Athena) and its query with the same
+       column names.
+    5. Incident / change no.: optional, unless your admin made it required.
+    6. Click "Run both queries & compare". You get PASS / FAIL, TRUE / FALSE
+       per column, and Download Excel.
+
+  Query tips:
+    - Always write db.table (imp.loan_impairments).
+    - Only SELECT / WITH queries run. This is a read-only tool.
+    - Filter on the partition column (as_of_date / cob_date / load_date):
+      it is faster and stays under the 200,000-row limit.
+    - Big tables: use "Build recon queries from a CREATE TABLE" at the
+      top of Compare records (sums every column), or Trends ->
+      "Build monthly SUM queries".
+
+  Other tabs (each keeps its own queries and results):
+    - Statistics, Data quality, Trends: same Source / Target boxes.
+    - DDL compare: pick Hive (Hue), type db.table, "Fetch DDL from both".
+    - Partitions: Hive (Hue) + db.table -> Show partitions, Browse folder.
+    - Team history / Audit report: every run, who ran it, the SQL.
+
+--------------------------------------------------------------------------
+STEP 9 - Oracle and AWS (optional)
+--------------------------------------------------------------------------
+  Sign in as admin -> Admin tab -> Connections -> Add connection
+    Oracle : Type Oracle, host, port 1521, service name (same as SQL
+             Developer). Credentials: "Each user enters their own
+             credentials". Users type their SQL Developer login under the
+             Oracle connection.
+    Athena : Type AWS Athena, region, Glue database, workgroup.
+             From a laptop: Credentials "Each user enters their own
+             credentials" (paste an AWS access key / secret / session
+             token). On the real server: "No password (IAM role)".
+
+--------------------------------------------------------------------------
+COMMON PROBLEMS
+--------------------------------------------------------------------------
+  Black window closes immediately
+      -> Open cmd, cd C:\Users\<you>\recon_app, run
+         deploy\run_local_windows.bat   to see the message.
+  "Address already in use" / port 5000 busy
+      -> Another copy is running: close it, or set RECON_PORT=5001 in .env
+         and open http://127.0.0.1:5001
+  Sign-in page says "Could not check your password with Hue"
+      -> Run deploy\check_hive.bat (STEP 6). It shows exactly why.
+  "Your Hue sign-in is no longer held by the server"
+      -> The website was restarted. Sign out and sign in again.
+  No "Hive (Hue)" in the connection list
+      -> RECON_AUTH / RECON_HUE_URL were off at the first start. Fix .env and
+         restart; or as admin: Admin -> Connections -> Add connection,
+         Type "Hive via Hue", Hue address as in STEP 5, Credentials
+         "Use each person's own Recon sign-in".
+  Query error from Hive (e.g. "Table not found")
+      -> The message comes from Hive itself: check db.table and your access
+         in the Hue editor.
+  Red banner "Excel downloads are switched off"
+      -> STEP 4.
+  Forgot the admin password
+      -> In cmd, in the recon_app folder:
+         .venv\Scripts\python app.py reset-password admin
+
+Going live for the whole team on a server: see SETUP_STEPS.txt / DEPLOY.md.
