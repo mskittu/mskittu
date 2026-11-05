@@ -68,7 +68,7 @@ TYPES = {
         sql_hint="Type your read-only SELECT query here (use db.table names)",
         fields=[F("url", "Hue address", required=True, placeholder="http://huehost.intranet.company.com:8888"),
                 F("dialect", "Query engine", choices=["hive", "impala"], default="hive"),
-                F("database", "Default database", default="default"),
+                F("database", "Default database (one you can access; blank = your Hue default)", default=""),
                 F("api", "Hue API", choices=["auto", "v1", "classic"], default="auto"),
                 F("verify_ssl", "Check HTTPS certificate (https only)", choices=["yes", "no"], default="yes"),
                 F("ca_bundle", "Company CA bundle file on the server (optional, https only)"),
@@ -664,7 +664,7 @@ class _Hue:
         sid = str(uuid.uuid4())
         self.snip = {"id": sid, "type": self.dialect, "status": "running", "statementType": "text",
                      "statement": sql, "statement_raw": sql, "statementPath": "", "aceCursorPosition": None,
-                     "associatedDocumentUuid": None, "database": self.cfg.get("database") or "default",
+                     "associatedDocumentUuid": None, "database": self.cfg.get("database") or None,
                      "properties": {"files": [], "functions": [], "arguments": [], "settings": []},
                      "result": {"id": str(uuid.uuid4()), "type": "table", "handle": {}}, "variables": [],
                      "wasBatchExecuted": False}
@@ -680,8 +680,10 @@ class _Hue:
 
     def execute(self, sql):
         if self.mode == "v1":
-            body = self._post(f"/api/v1/editor/execute/{self.dialect}",
-                              {"statement": sql, "database": self.cfg.get("database") or "default"})
+            data = {"statement": sql}
+            if self.cfg.get("database"):
+                data["database"] = self.cfg["database"]
+            body = self._post(f"/api/v1/editor/execute/{self.dialect}", data)
             self.op = body.get("history_uuid") or (body.get("handle") or {}).get("guid")
             if not self.op:
                 raise QueryError("Hue did not return a query id.")
@@ -693,7 +695,7 @@ class _Hue:
                 # Some Hue versions reject the classic notebook call: try the newer editor API with the same sign-in.
                 try:
                     alt = self._post(f"/api/v1/editor/execute/{self.dialect}",
-                                     {"statement": sql, "database": self.cfg.get("database") or "default"}, ok404=True)
+                                     dict({"statement": sql}, **({"database": self.cfg["database"]} if self.cfg.get("database") else {})), ok404=True)
                 except QueryError:
                     alt = None
                 op = alt and (alt.get("history_uuid") or (alt.get("handle") or {}).get("guid"))
